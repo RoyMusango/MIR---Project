@@ -216,3 +216,21 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Modèles et descripteurs lourds
+descriptors/
+*.h5
+*.hdf5
+*.pt
+*.pth
+
+# Dataset (trop lourd pour Git)
+dataset_voitures/
+Flickr8k_Dataset/
+
+# Flask uploads
+Interface/uploads/
+
+# Environnement virtuel
+venv/
+.env
