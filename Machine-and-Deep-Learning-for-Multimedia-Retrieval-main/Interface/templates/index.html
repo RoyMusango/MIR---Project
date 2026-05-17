@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MIR — Image Retrieval Engine</title>
+    <meta name="description" content="Multimedia Image Retrieval search engine — Unimodal and Multimodal search with CLIP">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+
+    <!-- Top Navbar -->
+    <nav class="top-navbar" id="topNavbar">
+        <div class="nav-brand">MIR Engine</div>
+        <div class="nav-tabs">
+            <button class="nav-tab active" id="tabUnimodal" onclick="switchMode('unimodal')">
+                <span class="nav-tab-icon">🖼️</span> Unimodal Image Search
+            </button>
+            <button class="nav-tab" id="tabMultimodal" onclick="switchMode('multimodal')">
+                <span class="nav-tab-icon">🔗</span> Multimodal Search
+            </button>
+        </div>
+    </nav>
+
+    <div class="app-body">
+
+        <!-- ============ UNIMODAL SIDEBAR ============ -->
+        <aside class="sidebar" id="sidebarUnimodal">
+            <div class="sidebar-scroll">
+                <div class="brand">
+                    <h1 class="brand-title">Unimodal Search</h1>
+                    <p class="brand-sub">Image-to-Image Retrieval (Cars)</p>
+                </div>
+
+                <div class="divider"></div>
+
+                <!-- Query image upload -->
+                <div class="section">
+                    <span class="section-title">QUERY IMAGE</span>
+                    <div class="query-preview" id="queryPreview">
+                        <span class="placeholder-text">No image selected</span>
+                    </div>
+                    <label class="browse-btn" for="queryInput">
+                        📁 Browse Image…
+                        <input type="file" id="queryInput" accept="image/*" hidden>
+                    </label>
+                </div>
+
+                <div class="divider"></div>
+
+                <!-- Descriptors -->
+                <div class="section">
+                    <span class="section-title">DESCRIPTORS</span>
+
+                    <span class="group-label">Vector-based</span>
+                    <label class="checkbox-item"><input type="checkbox" name="descriptor" value="Color Histogram" data-group="vector"> Color Histogram</label>
+                    <label class="checkbox-item"><input type="checkbox" name="descriptor" value="HSV Histogram" data-group="vector"> HSV Histogram</label>
+                    <label class="checkbox-item"><input type="checkbox" name="descriptor" value="GLCM (Texture)" data-group="vector"> GLCM (Texture)</label>
+                    <label class="checkbox-item"><input type="checkbox" name="descriptor" value="LBP (Texture)" data-group="vector"> LBP (Texture)</label>
+                    <label class="checkbox-item"><input type="checkbox" name="descriptor" value="HOG (Shape)" data-group="vector"> HOG (Shape)</label>
+
+                    <span class="group-label" style="margin-top: 8px;">Keypoint-based</span>
+                    <label class="checkbox-item"><input type="checkbox" name="descriptor" value="SIFT (Keypoints)" data-group="keypoint"> SIFT (Keypoints)</label>
+                    <label class="checkbox-item"><input type="checkbox" name="descriptor" value="ORB (Keypoints)" data-group="keypoint"> ORB (Keypoints)</label>
+
+                    <p class="combo-info" id="comboInfo" style="display:none;">⚡ Distances will be normalized and averaged</p>
+                </div>
+
+                <div class="divider"></div>
+
+                <!-- Distance -->
+                <div class="section">
+                    <span class="section-title">DISTANCE METRIC</span>
+                    <select id="distanceSelect" class="select-input">
+                        <option>Euclidienne</option>
+                        <option>Chi carre</option>
+                        <option>Correlation</option>
+                        <option>Intersection</option>
+                        <option>Bhattacharyya</option>
+                    </select>
+                </div>
+
+                <!-- K slider -->
+                <div class="section">
+                    <span class="section-title" id="kLabel">RESULTS: 10</span>
+                    <input type="range" id="kSlider" min="1" max="50" value="10" class="slider">
+                </div>
+
+                <div class="divider"></div>
+
+                <!-- Search button -->
+                <button class="search-btn" id="searchBtn" onclick="doSearch()">🔍 Search</button>
+
+                <!-- Progress -->
+                <div class="progress-wrapper" id="progressWrapper" style="display:none;">
+                    <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+                    <span class="status-text" id="statusText">Searching…</span>
+                </div>
+
+                <!-- Status -->
+                <p class="status-text" id="statusLabel">Ready</p>
+                <p class="timing-text" id="timingLabel"></p>
+
+                <div class="divider"></div>
+
+                <!-- Metrics panel -->
+                <div class="metrics-panel" id="metricsPanel" style="display:none;">
+                    <span class="metrics-title">EVALUATION METRICS</span>
+                    <p class="metric-info" id="queryClassInfo"></p>
+                    <p class="metric-info italic" id="descUsedInfo"></p>
+
+                    <span class="metrics-subtitle">Top 50</span>
+                    <p class="metric-value" id="p50">Precision: —</p>
+                    <p class="metric-value" id="r50">Recall: —</p>
+
+                    <span class="metrics-subtitle">Top 100</span>
+                    <p class="metric-value" id="p100">Precision: —</p>
+                    <p class="metric-value" id="r100">Recall: —</p>
+                </div>
+            </div>
+        </aside>
+
+        <!-- ============ MULTIMODAL SIDEBAR ============ -->
+        <aside class="sidebar" id="sidebarMultimodal" style="display:none;">
+            <div class="sidebar-scroll">
+                <div class="brand">
+                    <h1 class="brand-title">Multimodal Search</h1>
+                    <p class="brand-sub">Text-to-Image with CLIP · Flickr8k</p>
+                </div>
+
+                <div class="divider"></div>
+
+                <!-- Text query input -->
+                <div class="section">
+                    <span class="section-title">TEXT QUERY</span>
+                    <textarea class="text-input" id="textQuery" placeholder="Describe the image you're looking for…&#10;e.g. a dog running on the beach" rows="4"></textarea>
+                </div>
+
+                <div class="divider"></div>
+
+                <!-- K slider -->
+                <div class="section">
+                    <span class="section-title" id="kLabelMulti">RESULTS: 20</span>
+                    <input type="range" id="kSliderMulti" min="1" max="50" value="20" class="slider">
+                </div>
+
+                <div class="divider"></div>
+
+                <!-- Search button -->
+                <button class="search-btn" id="searchBtnMulti" onclick="doTextSearch()">🔍 Search by Text</button>
+
+                <!-- Progress -->
+                <div class="progress-wrapper" id="progressWrapperMulti" style="display:none;">
+                    <div class="progress-bar"><div class="progress-fill" id="progressFillMulti"></div></div>
+                    <span class="status-text">Searching…</span>
+                </div>
+
+                <!-- Status -->
+                <p class="status-text" id="statusLabelMulti">Ready</p>
+                <p class="timing-text" id="timingLabelMulti"></p>
+
+                <div class="divider"></div>
+
+                <div class="clip-info-panel">
+                    <span class="metrics-title">HOW IT WORKS</span>
+                    <p class="metric-info">CLIP encodes your text query and compares it with pre-computed image embeddings from the Flickr8k dataset using cosine similarity.</p>
+                    <p class="metric-info italic" style="margin-top:6px;">~8,000 images · 512-dim vectors</p>
+                </div>
+            </div>
+        </aside>
+
+        <!-- ============ MAIN CONTENT ============ -->
+        <main class="content" id="content">
+            <h2 class="results-header" id="resultsHeader">Results</h2>
+            <div class="results-grid" id="resultsGrid">
+                <p class="no-results" id="placeholder">Select an image and click Search to find similar cars</p>
+            </div>
+        </main>
+    </div>
+
+    <!-- Full-size image modal -->
+    <div class="modal-overlay" id="imageModal" onclick="closeModal()">
+        <div class="modal-content" onclick="event.stopPropagation()">
+            <img id="modalImg" src="" alt="Preview">
+            <p class="modal-filename" id="modalFilename"></p>
+            <button class="modal-close" onclick="closeModal()">✕</button>
+        </div>
+    </div>
+
+    <script>
+        // ---- State ----
+        let selectedFile = null;
+        let currentMode = 'unimodal';
+
+        // ---- Mode switching ----
+        function switchMode(mode) {
+            currentMode = mode;
+
+            document.getElementById('tabUnimodal').classList.toggle('active', mode === 'unimodal');
+            document.getElementById('tabMultimodal').classList.toggle('active', mode === 'multimodal');
+
+            document.getElementById('sidebarUnimodal').style.display = mode === 'unimodal' ? '' : 'none';
+            document.getElementById('sidebarMultimodal').style.display = mode === 'multimodal' ? '' : 'none';
+
+            // Update placeholder and header
+            const grid = document.getElementById('resultsGrid');
+            const header = document.getElementById('resultsHeader');
+            if (mode === 'unimodal') {
+                header.textContent = 'Results';
+                grid.innerHTML = '<p class="no-results">Select an image and click Search to find similar cars</p>';
+            } else {
+                header.textContent = 'Results';
+                grid.innerHTML = '<p class="no-results">Enter a text description and click Search to find matching images</p>';
+            }
+
+            // Hide metrics
+            document.getElementById('metricsPanel').style.display = 'none';
+        }
+
+        // ---- Query image preview ----
+        document.getElementById('queryInput').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+            selectedFile = file;
+
+            const reader = new FileReader();
+            reader.onload = function(ev) {
+                const preview = document.getElementById('queryPreview');
+                preview.innerHTML = `<img src="${ev.target.result}" alt="Query">`;
+            };
+            reader.readAsDataURL(file);
+            document.getElementById('statusLabel').textContent = 'Loaded: ' + file.name;
+        });
+
+        // ---- Descriptor checkboxes - mutual exclusion between groups ----
+        const allCheckboxes = document.querySelectorAll('input[name="descriptor"]');
+
+        allCheckboxes.forEach(cb => {
+            cb.addEventListener('change', function() {
+                const checked = getCheckedDescriptors();
+                const groups = new Set(checked.map(c => c.dataset.group));
+
+                // if something is checked, disable other groups
+                if (checked.length > 0) {
+                    const activeGroup = checked[0].dataset.group;
+                    allCheckboxes.forEach(other => {
+                        if (other.dataset.group !== activeGroup) {
+                            other.disabled = true;
+                            other.closest('.checkbox-item').classList.add('disabled');
+                        } else {
+                            other.disabled = false;
+                            other.closest('.checkbox-item').classList.remove('disabled');
+                        }
+                    });
+                } else {
+                    // nothing checked, enable all
+                    allCheckboxes.forEach(other => {
+                        other.disabled = false;
+                        other.closest('.checkbox-item').classList.remove('disabled');
+                    });
+                }
+
+                // update distance dropdown
+                updateDistances();
+
+                // show combo info
+                document.getElementById('comboInfo').style.display = checked.length >= 2 ? 'block' : 'none';
+            });
+        });
+
+        function getCheckedDescriptors() {
+            return Array.from(allCheckboxes).filter(cb => cb.checked);
+        }
+
+        function updateDistances() {
+            const checked = getCheckedDescriptors();
+            const names = checked.map(c => c.value);
+
+            fetch('/get_distances', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({descriptors: names})
+            })
+            .then(r => r.json())
+            .then(distances => {
+                const sel = document.getElementById('distanceSelect');
+                sel.innerHTML = '';
+                distances.forEach(d => {
+                    const opt = document.createElement('option');
+                    opt.value = d;
+                    opt.textContent = d;
+                    sel.appendChild(opt);
+                });
+            });
+        }
+
+        // ---- K sliders ----
+        document.getElementById('kSlider').addEventListener('input', function() {
+            document.getElementById('kLabel').textContent = 'RESULTS: ' + this.value;
+        });
+
+        document.getElementById('kSliderMulti').addEventListener('input', function() {
+            document.getElementById('kLabelMulti').textContent = 'RESULTS: ' + this.value;
+        });
+
+        // ---- Unimodal Search ----
+        function doSearch() {
+            if (!selectedFile) {
+                setStatus('statusLabel', '⚠ Please select a query image first.', 'error');
+                return;
+            }
+
+            const checked = getCheckedDescriptors();
+            if (checked.length === 0) {
+                setStatus('statusLabel', '⚠ Please select at least one descriptor.', 'error');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('query_image', selectedFile);
+            checked.forEach(cb => formData.append('descriptors', cb.value));
+            formData.append('distance', document.getElementById('distanceSelect').value);
+            formData.append('k', document.getElementById('kSlider').value);
+
+            // UI feedback
+            const btn = document.getElementById('searchBtn');
+            btn.disabled = true;
+            btn.textContent = 'Searching…';
+            document.getElementById('progressWrapper').style.display = 'block';
+            document.getElementById('progressFill').style.width = '30%';
+            setStatus('statusLabel', 'Extracting features & comparing…', 'active');
+            document.getElementById('timingLabel').textContent = '';
+
+            fetch('/search', {
+                method: 'POST',
+                body: formData
+            })
+            .then(r => r.json())
+            .then(data => {
+                btn.disabled = false;
+                btn.textContent = '🔍 Search';
+                document.getElementById('progressWrapper').style.display = 'none';
+
+                if (data.error) {
+                    setStatus('statusLabel', '✗ ' + data.error, 'error');
+                    return;
+                }
+
+                setStatus('statusLabel', `✓ Found ${data.total_results} results (showing ${data.results.length})`, 'success');
+                document.getElementById('timingLabel').textContent = `⏱ ${data.elapsed}s`;
+
+                // metrics
+                const mp = document.getElementById('metricsPanel');
+                mp.style.display = 'block';
+                document.getElementById('queryClassInfo').textContent = `Query class: ${data.query_class} (${data.total_relevant} in DB)`;
+                document.getElementById('descUsedInfo').textContent = data.descriptors_used;
+                document.getElementById('p50').textContent = `Precision: ${data.metrics.p50}%`;
+                document.getElementById('r50').textContent = `Recall: ${data.metrics.r50}%`;
+                document.getElementById('p100').textContent = `Precision: ${data.metrics.p100}%`;
+                document.getElementById('r100').textContent = `Recall: ${data.metrics.r100}%`;
+
+                displayResults(data.results, false);
+            })
+            .catch(err => {
+                btn.disabled = false;
+                btn.textContent = '🔍 Search';
+                document.getElementById('progressWrapper').style.display = 'none';
+                setStatus('statusLabel', '✗ Network error: ' + err.message, 'error');
+            });
+        }
+
+        // ---- Multimodal Text Search ----
+        function doTextSearch() {
+            const query = document.getElementById('textQuery').value.trim();
+            if (!query) {
+                setStatus('statusLabelMulti', '⚠ Please enter a text query.', 'error');
+                return;
+            }
+
+            const k = document.getElementById('kSliderMulti').value;
+
+            const btn = document.getElementById('searchBtnMulti');
+            btn.disabled = true;
+            btn.textContent = 'Searching…';
+            document.getElementById('progressWrapperMulti').style.display = 'block';
+            document.getElementById('progressFillMulti').style.width = '30%';
+            setStatus('statusLabelMulti', 'Encoding text & comparing with Flickr8k…', 'active');
+            document.getElementById('timingLabelMulti').textContent = '';
+
+            fetch('/search_text', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ query: query, k: parseInt(k) })
+            })
+            .then(r => r.json())
+            .then(data => {
+                btn.disabled = false;
+                btn.textContent = '🔍 Search by Text';
+                document.getElementById('progressWrapperMulti').style.display = 'none';
+
+                if (data.error) {
+                    setStatus('statusLabelMulti', '✗ ' + data.error, 'error');
+                    return;
+                }
+
+                setStatus('statusLabelMulti', `✓ Found top ${data.results.length} matches from ${data.total_results} images`, 'success');
+                document.getElementById('timingLabelMulti').textContent = `⏱ ${data.elapsed}s`;
+
+                displayResults(data.results, true);
+            })
+            .catch(err => {
+                btn.disabled = false;
+                btn.textContent = '🔍 Search by Text';
+                document.getElementById('progressWrapperMulti').style.display = 'none';
+                setStatus('statusLabelMulti', '✗ Network error: ' + err.message, 'error');
+            });
+        }
+
+        function setStatus(labelId, msg, type) {
+            const lbl = document.getElementById(labelId);
+            lbl.textContent = msg;
+            lbl.className = 'status-text';
+            if (type === 'error') lbl.classList.add('status-error');
+            else if (type === 'success') lbl.classList.add('status-success');
+            else if (type === 'active') lbl.classList.add('status-active');
+        }
+
+        // ---- Display results grid ----
+        function displayResults(results, isMultimodal) {
+            const grid = document.getElementById('resultsGrid');
+            grid.innerHTML = '';
+
+            if (results.length === 0) {
+                grid.innerHTML = '<p class="no-results">No results found</p>';
+                return;
+            }
+
+            results.forEach(r => {
+                const card = document.createElement('div');
+                if (isMultimodal) {
+                    card.className = 'result-card multimodal';
+                } else {
+                    card.className = 'result-card' + (r.is_relevant ? ' relevant' : '');
+                }
+                card.onclick = () => openModal(r.image_url, r.filename);
+
+                const scoreLabel = isMultimodal
+                    ? `sim = ${r.similarity.toFixed(4)}`
+                    : `d = ${r.distance.toFixed(4)}`;
+
+                card.innerHTML = `
+                    <span class="rank-badge">#${r.rank}</span>
+                    <div class="thumb-wrapper">
+                        <img src="${r.image_url}" alt="${r.filename}" loading="lazy">
+                    </div>
+                    <p class="card-filename" title="${r.filename}">${r.filename.length > 22 ? r.filename.slice(0, 19) + '...' : r.filename}</p>
+                    <p class="card-distance">${scoreLabel}</p>
+                `;
+
+                grid.appendChild(card);
+            });
+        }
+
+        // ---- Image modal ----
+        function openModal(src, filename) {
+            document.getElementById('modalImg').src = src;
+            document.getElementById('modalFilename').textContent = filename;
+            document.getElementById('imageModal').classList.add('active');
+        }
+
+        function closeModal() {
+            document.getElementById('imageModal').classList.remove('active');
+        }
+
+        // close modal on Escape
+        document.addEventListener('keydown', e => {
+            if (e.key === 'Escape') closeModal();
+        });
+
+        // Enter key in text query triggers search
+        document.getElementById('textQuery').addEventListener('keydown', e => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                doTextSearch();
+            }
+        });
+    </script>
+</body>
+</html>

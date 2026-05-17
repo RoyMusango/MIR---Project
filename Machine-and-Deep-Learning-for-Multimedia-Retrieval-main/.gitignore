@@ -1,0 +1,15 @@
+dataset_voitures/ 
+# This database must be downloaded at the following url and unzipped in the same directory as this file: https://github.com/sachadem/Machine-and-Deep-Learning-for-Multimedia-Retrieval
+
+Flickr8k_Dataset/
+Flickr8k_text/
+# These databases must be downloaded at the following url and unzipped in the same directory as this file: github.com/goodwillyoga/Flickr8k_dataset
+
+.venv/
+
+descriptors/ 
+#This directory is used to store the descriptors of the images and must be computed at the beginning of the project.
+
+__pycache__/
+
+Interface/uploads/
