@@ -105,6 +105,43 @@ class CLIPEmbedder:
         
         return text_features.cpu().numpy().flatten().astype(np.float32)
 
+    def encode_texts_batch(self, texts: list) -> np.ndarray:
+        """
+        Encode a batch of text strings into 512-dim normalized feature vectors.
+
+        Parameters
+        ----------
+        texts : list of str
+            List of text captions to encode.
+
+        Returns
+        -------
+        np.ndarray
+            A 2-D float32 array of shape (len(texts), 512), L2-normalized.
+        """
+        inputs = self.processor(
+            text=texts,
+            return_tensors="pt",
+            padding=True,
+            truncation=True,
+            max_length=77
+        )
+        input_ids = inputs["input_ids"].to(self.device)
+        attention_mask = inputs["attention_mask"].to(self.device)
+
+        with torch.no_grad():
+            text_features = self.model.get_text_features(
+                input_ids=input_ids,
+                attention_mask=attention_mask
+            )
+
+        if not isinstance(text_features, torch.Tensor):
+            text_features = text_features.pooler_output
+
+        text_features = text_features / text_features.norm(dim=-1, keepdim=True)
+
+        return text_features.cpu().numpy().astype(np.float32)
+
     def encode_images_batch(self, image_paths: list, batch_size: int = 32) -> list:
         """
         Encode a batch of images into 512-dim normalized feature vectors.

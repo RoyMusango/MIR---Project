@@ -27,16 +27,19 @@ os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 # Flickr8k paths
 FLICKR8K_DATASET_PATH = os.path.join(PROJECT_ROOT, "Flickr8k_Dataset", "Flicker8k_Dataset")
 FLICKR8K_H5_PATH = os.path.join(DESCRIPTORS_PATH, "CLIP_Flickr8k", "clip_flickr8k.h5")
+FLICKR8K_CAPTIONS_H5_PATH = os.path.join(DESCRIPTORS_PATH, "CLIP_Flickr8k", "clip_flickr8k_captions.h5")
 
 # descriptor name -> (folder, function, algo_id) — CLIP removed
 DESCRIPTOR_MAP = {
-    "Color Histogram": ("Hist_Col", f.generateHistogramme_Color, 1),
-    "HSV Histogram":   ("HSV",      f.generateHistogramme_HSV,   2),
-    "GLCM (Texture)":  ("GLCM",     f.generateGLCM,             5),
-    "LBP (Texture)":   ("LBP",      f.generateLBP,              6),
-    "HOG (Shape)":     ("HOG",      f.generateHOG,              7),
-    "SIFT (Keypoints)":("SIFT",     f.generateSIFT,             3),
-    "ORB (Keypoints)": ("ORB",      f.generateORB,              4),
+    "Color Histogram":  ("Hist_Col", f.generateHistogramme_Color, 1),
+    "HSV Histogram":    ("HSV",      f.generateHistogramme_HSV,   2),
+    "GLCM (Texture)":   ("GLCM",     f.generateGLCM,              5),
+    "LBP (Texture)":    ("LBP",      f.generateLBP,               6),
+    "HOG (Shape)":      ("HOG",      f.generateHOG,               7),
+    "SIFT (Keypoints)": ("SIFT",     f.generateSIFT,              3),
+    "ORB (Keypoints)":  ("ORB",      f.generateORB,               4),
+    "ResNet50 (CNN)":   ("ResNet50", f.generateResNet50,           8),
+    "CLIP (ViT)":       ("CLIP",     f.generateCLIP,               9),
 }
 
 VECTOR_DESCRIPTORS = ["Color Histogram", "HSV Histogram", "GLCM (Texture)", "LBP (Texture)", "HOG (Shape)"]
@@ -49,6 +52,9 @@ HIGHER_IS_BETTER = {"Correlation", "Intersection", "Brute force", "Flann"}
 
 # ── Lazy-loaded Flickr8k CLIP data ──────────────────────────────────────
 _flickr8k_data = None
+_flickr8k_captions_data = None
+_faiss_image_index = None
+_faiss_text_index = None
 
 
 def load_flickr8k_embeddings():
@@ -73,6 +79,52 @@ def load_flickr8k_embeddings():
     print(f"[CLIP] Loaded {len(filenames)} Flickr8k embeddings ({embeddings.shape})")
     return _flickr8k_data
 
+def load_flickr8k_captions():
+    global _flickr8k_captions_data
+    if _flickr8k_captions_data is not None:
+        return _flickr8k_captions_data
+    import h5py
+    if not os.path.exists(FLICKR8K_CAPTIONS_H5_PATH):
+        raise FileNotFoundError(
+            f"Flickr8k captions embeddings not found at {FLICKR8K_CAPTIONS_H5_PATH}. "
+            "Run 'python build_flickr8k_captions_db.py' first."
+        )
+    print(f"[CLIP] Loading Flickr8k caption embeddings...")
+    with h5py.File(FLICKR8K_CAPTIONS_H5_PATH, "r") as hf:
+        embeddings = hf["embeddings"][:]
+        captions = [c.decode("utf-8") if isinstance(c, bytes) else c for c in hf["captions"][:]]
+        img_files = [fn.decode("utf-8") if isinstance(fn, bytes) else fn for fn in hf["filenames"][:]]
+    _flickr8k_captions_data = (captions, img_files, embeddings)
+    print(f"[CLIP] Loaded {len(captions)} caption embeddings")
+    return _flickr8k_captions_data
+
+
+def get_faiss_image_index():
+    global _faiss_image_index
+    if _faiss_image_index is not None:
+        return _faiss_image_index
+    import faiss
+    filenames, embeddings = load_flickr8k_embeddings()
+    embeddings = embeddings.astype(np.float32)
+    index = faiss.IndexFlatIP(embeddings.shape[1])
+    index.add(embeddings)
+    _faiss_image_index = index
+    print(f"[FAISS] Image index built: {index.ntotal} vectors")
+    return _faiss_image_index
+
+
+def get_faiss_text_index():
+    global _faiss_text_index
+    if _faiss_text_index is not None:
+        return _faiss_text_index
+    import faiss
+    captions, img_files, embeddings = load_flickr8k_captions()
+    embeddings = embeddings.astype(np.float32)
+    index = faiss.IndexFlatIP(embeddings.shape[1])
+    index.add(embeddings)
+    _faiss_text_index = index
+    print(f"[FAISS] Text index built: {index.ntotal} vectors")
+    return _faiss_text_index
 
 def get_image_class(filename):
     """get class from filename like '0_0_BMW_Serie3_100.jpg' -> '0_0'"""
@@ -197,14 +249,29 @@ def build_response(all_results, query_class, total_relevant, elapsed, k, descrip
 
     def compute_metrics(results_slice, total_rel):
         if not results_slice:
-            return 0.0, 0.0
+            return 0.0, 0.0, 0.0, 0.0, 0.0
         relevant_found = sum(1 for fname, _ in results_slice if get_image_class(fname) == query_class)
         precision = relevant_found / len(results_slice)
-        recall = relevant_found / total_rel if total_rel > 0 else 0
-        return precision, recall
+        recall = relevant_found / total_rel if total_rel > 0 else 0.0
 
-    p50, r50 = compute_metrics(all_results[:50], total_relevant)
-    p100, r100 = compute_metrics(all_results[:100], total_relevant)
+        # Average Precision (AP)
+        hits = 0
+        ap = 0.0
+        for i, (fname, _) in enumerate(results_slice, 1):
+            if get_image_class(fname) == query_class:
+                hits += 1
+                ap += hits / i
+        ap = ap / total_rel if total_rel > 0 else 0.0
+
+        # R-Precision (precision at rank R where R = total relevant)
+        r = min(total_rel, len(results_slice))
+        r_prec_hits = sum(1 for fname, _ in results_slice[:r] if get_image_class(fname) == query_class)
+        r_precision = r_prec_hits / r if r > 0 else 0.0
+
+        return precision, recall, ap, ap, r_precision
+
+    p50, r50, ap50, map50, rprec50 = compute_metrics(all_results[:50], total_relevant)
+    p100, r100, ap100, map100, rprec100 = compute_metrics(all_results[:100], total_relevant)
 
     top_k = all_results[:k]
     results_list = []
@@ -226,10 +293,15 @@ def build_response(all_results, query_class, total_relevant, elapsed, k, descrip
         "k": k,
         "descriptors_used": ", ".join(descriptor_keys),
         "metrics": {
-            "p50": round(p50 * 100, 1),
-            "r50": round(r50 * 100, 1),
-            "p100": round(p100 * 100, 1),
-            "r100": round(r100 * 100, 1)
+            "p50":     round(p50 * 100, 1),
+            "r50":     round(r50 * 100, 1),
+            "ap50":    round(ap50 * 100, 1),
+            "rprec50": round(rprec50 * 100, 1),
+            "p100":    round(p100 * 100, 1),
+            "r100":    round(r100 * 100, 1),
+            "ap100":   round(ap100 * 100, 1),
+            "rprec100":round(rprec100 * 100, 1),
+            "map":     round(((ap50 + ap100) / 2) * 100, 1),
         }
     }
 
@@ -317,7 +389,8 @@ def search_text():
     start = time.time()
 
     try:
-        filenames, embeddings = load_flickr8k_embeddings()
+        get_faiss_image_index()
+        filenames, _ = load_flickr8k_embeddings()
     except FileNotFoundError as e:
         return jsonify({"error": str(e)}), 500
 
@@ -326,19 +399,19 @@ def search_text():
     embedder = get_embedder()
     text_embedding = embedder.encode_text(query)
 
-    # Compute cosine similarity (embeddings are already L2-normalized)
-    similarities = embeddings @ text_embedding
-
-    # Get top-k indices
-    top_indices = np.argsort(similarities)[::-1][:k]
+    # FAISS k-NN search
+    index = get_faiss_image_index()
+    filenames, _ = load_flickr8k_embeddings()
+    query_vec = np.array([text_embedding], dtype=np.float32)
+    scores, indices = index.search(query_vec, k)
 
     elapsed = time.time() - start
 
     results_list = []
-    for rank, idx in enumerate(top_indices):
+    for rank, (idx, score) in enumerate(zip(indices[0], scores[0])):
         results_list.append({
             "filename": filenames[idx],
-            "similarity": round(float(similarities[idx]), 6),
+            "similarity": round(float(score), 6),
             "rank": rank + 1,
             "image_url": url_for('serve_flickr8k_image', filename=filenames[idx]),
         })
@@ -351,6 +424,62 @@ def search_text():
         "k": k,
     })
 
+@app.route('/search_image_to_text', methods=['POST'])
+def search_image_to_text():
+    """Multimodal image-to-text search using CLIP on Flickr8k captions."""
+    if 'query_image' not in request.files:
+        return jsonify({"error": "No image uploaded"}), 400
+
+    file = request.files['query_image']
+    if file.filename == '':
+        return jsonify({"error": "No image selected"}), 400
+
+    filename = secure_filename(file.filename)
+    filepath = os.path.join(UPLOAD_FOLDER, filename)
+    file.save(filepath)
+
+    k = int(request.form.get('k', 10))
+
+    start = time.time()
+
+    try:
+        get_faiss_text_index()
+        captions, img_files, _ = load_flickr8k_captions()
+    except FileNotFoundError as e:
+        return jsonify({"error": str(e)}), 500
+
+    # Encode query image
+    from clip_model import get_embedder
+    embedder = get_embedder()
+    img = cv2.imread(filepath)
+    if img is None:
+        return jsonify({"error": "Could not read image"}), 400
+
+    image_embedding = embedder.encode_image(img)
+    query_vec = np.array([image_embedding], dtype=np.float32)
+
+    # FAISS search in caption index
+    index = get_faiss_text_index()
+    scores, indices = index.search(query_vec, k)
+
+    elapsed = time.time() - start
+
+    results_list = []
+    for rank, (idx, score) in enumerate(zip(indices[0], scores[0])):
+        results_list.append({
+            "caption": captions[idx],
+            "source_image": img_files[idx],
+            "similarity": round(float(score), 6),
+            "rank": rank + 1,
+            "image_url": url_for('serve_flickr8k_image', filename=img_files[idx]),
+        })
+
+    return jsonify({
+        "results": results_list,
+        "elapsed": round(elapsed, 2),
+        "query_image_url": url_for('serve_upload', filename=filename),
+        "k": k,
+    })
 
 if __name__ == '__main__':
     app.run(debug=True, port=5000)

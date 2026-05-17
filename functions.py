@@ -8,6 +8,10 @@ from skimage import img_as_ubyte
 from skimage.feature import graycomatrix, graycoprops, local_binary_pattern
 from skimage.transform import resize
 from scipy.spatial.distance import euclidean
+import torch
+import torchvision.models as models
+import torchvision.transforms as transforms
+from PIL import Image
 
 
 #COMPARATORS
@@ -204,6 +208,38 @@ def generateCLIP(image):
     feature = embedder.encode_image(image)
     print(f"CLIP feature extraction finished in {time.time()-start_time} seconds !!!!")
     return feature
+
+_resnet_model = None
+
+def _get_resnet():
+    global _resnet_model
+    if _resnet_model is None:
+        model = models.resnet50(weights=models.ResNet50_Weights.DEFAULT)
+        model = torch.nn.Sequential(*list(model.children())[:-1])
+        model.eval()
+        _resnet_model = model
+    return _resnet_model
+
+_resnet_transform = transforms.Compose([
+    transforms.Resize(256),
+    transforms.CenterCrop(224),
+    transforms.ToTensor(),
+    transforms.Normalize(
+        mean=[0.485, 0.456, 0.406],
+        std=[0.229, 0.224, 0.225]
+    ),
+])
+
+def generateResNet50(image):
+    start_time = time.time()
+    img_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+    pil_img = Image.fromarray(img_rgb)
+    x = _resnet_transform(pil_img).unsqueeze(0)
+    with torch.no_grad():
+        feat = _get_resnet()(x).squeeze().numpy()
+    feat = feat / (np.linalg.norm(feat) + 1e-10)
+    print(f"ResNet50 feature extraction finished in {time.time()-start_time} seconds !!!!")
+    return feat.astype(np.float32)
 
 def extractReqFeatures(fileName,algo_choice):  
     print(algo_choice)
