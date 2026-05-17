@@ -61,6 +61,10 @@
                     <label class="checkbox-item"><input type="checkbox" name="descriptor" value="LBP (Texture)" data-group="vector"> LBP (Texture)</label>
                     <label class="checkbox-item"><input type="checkbox" name="descriptor" value="HOG (Shape)" data-group="vector"> HOG (Shape)</label>
 
+                    <span class="group-label" style="margin-top: 8px;">Deep Learning</span>
+                    <label class="checkbox-item"><input type="checkbox" name="descriptor" value="ResNet50 (CNN)" data-group="vector"> ResNet50 (CNN) 🧠</label>
+                    <label class="checkbox-item"><input type="checkbox" name="descriptor" value="CLIP (ViT)" data-group="vector"> CLIP ViT-B/32 🧠</label>
+
                     <span class="group-label" style="margin-top: 8px;">Keypoint-based</span>
                     <label class="checkbox-item"><input type="checkbox" name="descriptor" value="SIFT (Keypoints)" data-group="keypoint"> SIFT (Keypoints)</label>
                     <label class="checkbox-item"><input type="checkbox" name="descriptor" value="ORB (Keypoints)" data-group="keypoint"> ORB (Keypoints)</label>
@@ -85,7 +89,7 @@
                 <!-- K slider -->
                 <div class="section">
                     <span class="section-title" id="kLabel">RESULTS: 10</span>
-                    <input type="range" id="kSlider" min="1" max="50" value="10" class="slider">
+                    <input type="range" id="kSlider" min="1" max="100" value="10" class="slider">
                 </div>
 
                 <div class="divider"></div>
@@ -114,10 +118,17 @@
                     <span class="metrics-subtitle">Top 50</span>
                     <p class="metric-value" id="p50">Precision: —</p>
                     <p class="metric-value" id="r50">Recall: —</p>
+                    <p class="metric-value" id="ap50">AP: —</p>
+                    <p class="metric-value" id="rprec50">R-Precision: —</p>
 
                     <span class="metrics-subtitle">Top 100</span>
                     <p class="metric-value" id="p100">Precision: —</p>
                     <p class="metric-value" id="r100">Recall: —</p>
+                    <p class="metric-value" id="ap100">AP: —</p>
+                    <p class="metric-value" id="rprec100">R-Precision: —</p>
+
+                    <span class="metrics-subtitle">Overall</span>
+                    <p class="metric-value" id="mapScore">mAP: —</p>
                 </div>
             </div>
         </aside>
@@ -127,15 +138,38 @@
             <div class="sidebar-scroll">
                 <div class="brand">
                     <h1 class="brand-title">Multimodal Search</h1>
-                    <p class="brand-sub">Text-to-Image with CLIP · Flickr8k</p>
+                    <p class="brand-sub">CLIP · Flickr8k · FAISS</p>
+                </div>
+
+                <div class="divider"></div>
+
+                <!-- Mode toggle -->
+                <div class="section">
+                    <span class="section-title">SEARCH MODE</span>
+                    <div style="display:flex; gap:8px; margin-top:6px;">
+                        <button class="mode-btn active" id="btnTextToImage" onclick="switchMultiMode('text2img')">📝 Text → Image</button>
+                        <button class="mode-btn" id="btnImageToText" onclick="switchMultiMode('img2text')">🖼️ Image → Text</button>
+                    </div>
                 </div>
 
                 <div class="divider"></div>
 
                 <!-- Text query input -->
-                <div class="section">
+                <div class="section" id="textQuerySection">
                     <span class="section-title">TEXT QUERY</span>
                     <textarea class="text-input" id="textQuery" placeholder="Describe the image you're looking for…&#10;e.g. a dog running on the beach" rows="4"></textarea>
+                </div>
+
+                <!-- Image query input (image-to-text) -->
+                <div class="section" id="imageQuerySection" style="display:none;">
+                    <span class="section-title">QUERY IMAGE</span>
+                    <div class="query-preview" id="queryPreviewMulti">
+                        <span class="placeholder-text">No image selected</span>
+                    </div>
+                    <label class="browse-btn" for="queryInputMulti">
+                        📁 Browse Image…
+                        <input type="file" id="queryInputMulti" accept="image/*" hidden>
+                    </label>
                 </div>
 
                 <div class="divider"></div>
@@ -149,7 +183,7 @@
                 <div class="divider"></div>
 
                 <!-- Search button -->
-                <button class="search-btn" id="searchBtnMulti" onclick="doTextSearch()">🔍 Search by Text</button>
+                <button class="search-btn" id="searchBtnMulti" onclick="doMultiSearch()">🔍 Search</button>
 
                 <!-- Progress -->
                 <div class="progress-wrapper" id="progressWrapperMulti" style="display:none;">
@@ -165,8 +199,8 @@
 
                 <div class="clip-info-panel">
                     <span class="metrics-title">HOW IT WORKS</span>
-                    <p class="metric-info">CLIP encodes your text query and compares it with pre-computed image embeddings from the Flickr8k dataset using cosine similarity.</p>
-                    <p class="metric-info italic" style="margin-top:6px;">~8,000 images · 512-dim vectors</p>
+                    <p class="metric-info" id="clipInfoText">CLIP encodes your text query and compares it with pre-computed image embeddings from Flickr8k using FAISS for fast k-NN search.</p>
+                    <p class="metric-info italic" style="margin-top:6px;">~8,000 images · 40,455 captions · 512-dim vectors</p>
                 </div>
             </div>
         </aside>
@@ -192,7 +226,9 @@
     <script>
         // ---- State ----
         let selectedFile = null;
+        let selectedFileMulti = null;
         let currentMode = 'unimodal';
+        let currentMultiMode = 'text2img';
 
         // ---- Mode switching ----
         function switchMode(mode) {
@@ -204,34 +240,58 @@
             document.getElementById('sidebarUnimodal').style.display = mode === 'unimodal' ? '' : 'none';
             document.getElementById('sidebarMultimodal').style.display = mode === 'multimodal' ? '' : 'none';
 
-            // Update placeholder and header
             const grid = document.getElementById('resultsGrid');
             const header = document.getElementById('resultsHeader');
+            header.textContent = 'Results';
             if (mode === 'unimodal') {
-                header.textContent = 'Results';
                 grid.innerHTML = '<p class="no-results">Select an image and click Search to find similar cars</p>';
             } else {
-                header.textContent = 'Results';
-                grid.innerHTML = '<p class="no-results">Enter a text description and click Search to find matching images</p>';
+                grid.innerHTML = '<p class="no-results">Enter a text description or upload an image to search Flickr8k</p>';
             }
 
-            // Hide metrics
             document.getElementById('metricsPanel').style.display = 'none';
         }
 
-        // ---- Query image preview ----
+        // ---- Multimodal sub-mode switching ----
+        function switchMultiMode(mode) {
+            currentMultiMode = mode;
+            document.getElementById('btnTextToImage').classList.toggle('active', mode === 'text2img');
+            document.getElementById('btnImageToText').classList.toggle('active', mode === 'img2text');
+            document.getElementById('textQuerySection').style.display = mode === 'text2img' ? '' : 'none';
+            document.getElementById('imageQuerySection').style.display = mode === 'img2text' ? '' : 'none';
+
+            const info = document.getElementById('clipInfoText');
+            if (mode === 'text2img') {
+                info.textContent = 'CLIP encodes your text query and compares it with pre-computed image embeddings from Flickr8k using FAISS for fast k-NN search.';
+            } else {
+                info.textContent = 'CLIP encodes your query image and finds the most semantically matching captions from the 40,455 Flickr8k descriptions using FAISS.';
+            }
+        }
+
+        // ---- Query image preview (unimodal) ----
         document.getElementById('queryInput').addEventListener('change', function(e) {
             const file = e.target.files[0];
             if (!file) return;
             selectedFile = file;
-
             const reader = new FileReader();
             reader.onload = function(ev) {
-                const preview = document.getElementById('queryPreview');
-                preview.innerHTML = `<img src="${ev.target.result}" alt="Query">`;
+                document.getElementById('queryPreview').innerHTML = `<img src="${ev.target.result}" alt="Query">`;
             };
             reader.readAsDataURL(file);
             document.getElementById('statusLabel').textContent = 'Loaded: ' + file.name;
+        });
+
+        // ---- Query image preview (multimodal image-to-text) ----
+        document.getElementById('queryInputMulti').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+            selectedFileMulti = file;
+            const reader = new FileReader();
+            reader.onload = function(ev) {
+                document.getElementById('queryPreviewMulti').innerHTML = `<img src="${ev.target.result}" alt="Query">`;
+            };
+            reader.readAsDataURL(file);
+            setStatus('statusLabelMulti', 'Loaded: ' + file.name, '');
         });
 
         // ---- Descriptor checkboxes - mutual exclusion between groups ----
@@ -240,9 +300,7 @@
         allCheckboxes.forEach(cb => {
             cb.addEventListener('change', function() {
                 const checked = getCheckedDescriptors();
-                const groups = new Set(checked.map(c => c.dataset.group));
 
-                // if something is checked, disable other groups
                 if (checked.length > 0) {
                     const activeGroup = checked[0].dataset.group;
                     allCheckboxes.forEach(other => {
@@ -255,17 +313,13 @@
                         }
                     });
                 } else {
-                    // nothing checked, enable all
                     allCheckboxes.forEach(other => {
                         other.disabled = false;
                         other.closest('.checkbox-item').classList.remove('disabled');
                     });
                 }
 
-                // update distance dropdown
                 updateDistances();
-
-                // show combo info
                 document.getElementById('comboInfo').style.display = checked.length >= 2 ? 'block' : 'none';
             });
         });
@@ -324,7 +378,6 @@
             formData.append('distance', document.getElementById('distanceSelect').value);
             formData.append('k', document.getElementById('kSlider').value);
 
-            // UI feedback
             const btn = document.getElementById('searchBtn');
             btn.disabled = true;
             btn.textContent = 'Searching…';
@@ -333,10 +386,7 @@
             setStatus('statusLabel', 'Extracting features & comparing…', 'active');
             document.getElementById('timingLabel').textContent = '';
 
-            fetch('/search', {
-                method: 'POST',
-                body: formData
-            })
+            fetch('/search', { method: 'POST', body: formData })
             .then(r => r.json())
             .then(data => {
                 btn.disabled = false;
@@ -351,15 +401,23 @@
                 setStatus('statusLabel', `✓ Found ${data.total_results} results (showing ${data.results.length})`, 'success');
                 document.getElementById('timingLabel').textContent = `⏱ ${data.elapsed}s`;
 
-                // metrics
+                // Update all metrics
                 const mp = document.getElementById('metricsPanel');
                 mp.style.display = 'block';
                 document.getElementById('queryClassInfo').textContent = `Query class: ${data.query_class} (${data.total_relevant} in DB)`;
                 document.getElementById('descUsedInfo').textContent = data.descriptors_used;
-                document.getElementById('p50').textContent = `Precision: ${data.metrics.p50}%`;
-                document.getElementById('r50').textContent = `Recall: ${data.metrics.r50}%`;
-                document.getElementById('p100').textContent = `Precision: ${data.metrics.p100}%`;
-                document.getElementById('r100').textContent = `Recall: ${data.metrics.r100}%`;
+
+                document.getElementById('p50').textContent    = `Precision: ${data.metrics.p50}%`;
+                document.getElementById('r50').textContent    = `Recall: ${data.metrics.r50}%`;
+                document.getElementById('ap50').textContent   = `AP: ${data.metrics.ap50}%`;
+                document.getElementById('rprec50').textContent = `R-Precision: ${data.metrics.rprec50}%`;
+
+                document.getElementById('p100').textContent    = `Precision: ${data.metrics.p100}%`;
+                document.getElementById('r100').textContent    = `Recall: ${data.metrics.r100}%`;
+                document.getElementById('ap100').textContent   = `AP: ${data.metrics.ap100}%`;
+                document.getElementById('rprec100').textContent = `R-Precision: ${data.metrics.rprec100}%`;
+
+                document.getElementById('mapScore').textContent = `mAP: ${data.metrics.map}%`;
 
                 displayResults(data.results, false);
             })
@@ -371,7 +429,16 @@
             });
         }
 
-        // ---- Multimodal Text Search ----
+        // ---- Multimodal Search dispatcher ----
+        function doMultiSearch() {
+            if (currentMultiMode === 'text2img') {
+                doTextSearch();
+            } else {
+                doImageToTextSearch();
+            }
+        }
+
+        // ---- Text → Image Search ----
         function doTextSearch() {
             const query = document.getElementById('textQuery').value.trim();
             if (!query) {
@@ -380,13 +447,12 @@
             }
 
             const k = document.getElementById('kSliderMulti').value;
-
             const btn = document.getElementById('searchBtnMulti');
             btn.disabled = true;
             btn.textContent = 'Searching…';
             document.getElementById('progressWrapperMulti').style.display = 'block';
             document.getElementById('progressFillMulti').style.width = '30%';
-            setStatus('statusLabelMulti', 'Encoding text & comparing with Flickr8k…', 'active');
+            setStatus('statusLabelMulti', 'Encoding text & searching with FAISS…', 'active');
             document.getElementById('timingLabelMulti').textContent = '';
 
             fetch('/search_text', {
@@ -397,7 +463,7 @@
             .then(r => r.json())
             .then(data => {
                 btn.disabled = false;
-                btn.textContent = '🔍 Search by Text';
+                btn.textContent = '🔍 Search';
                 document.getElementById('progressWrapperMulti').style.display = 'none';
 
                 if (data.error) {
@@ -405,14 +471,57 @@
                     return;
                 }
 
-                setStatus('statusLabelMulti', `✓ Found top ${data.results.length} matches from ${data.total_results} images`, 'success');
+                setStatus('statusLabelMulti', `✓ Top ${data.results.length} matches from ${data.total_results} images`, 'success');
                 document.getElementById('timingLabelMulti').textContent = `⏱ ${data.elapsed}s`;
-
-                displayResults(data.results, true);
+                displayResults(data.results, true, false);
             })
             .catch(err => {
                 btn.disabled = false;
-                btn.textContent = '🔍 Search by Text';
+                btn.textContent = '🔍 Search';
+                document.getElementById('progressWrapperMulti').style.display = 'none';
+                setStatus('statusLabelMulti', '✗ Network error: ' + err.message, 'error');
+            });
+        }
+
+        // ---- Image → Text Search ----
+        function doImageToTextSearch() {
+            if (!selectedFileMulti) {
+                setStatus('statusLabelMulti', '⚠ Please select a query image first.', 'error');
+                return;
+            }
+
+            const k = document.getElementById('kSliderMulti').value;
+            const formData = new FormData();
+            formData.append('query_image', selectedFileMulti);
+            formData.append('k', k);
+
+            const btn = document.getElementById('searchBtnMulti');
+            btn.disabled = true;
+            btn.textContent = 'Searching…';
+            document.getElementById('progressWrapperMulti').style.display = 'block';
+            document.getElementById('progressFillMulti').style.width = '30%';
+            setStatus('statusLabelMulti', 'Encoding image & searching captions with FAISS…', 'active');
+            document.getElementById('timingLabelMulti').textContent = '';
+
+            fetch('/search_image_to_text', { method: 'POST', body: formData })
+            .then(r => r.json())
+            .then(data => {
+                btn.disabled = false;
+                btn.textContent = '🔍 Search';
+                document.getElementById('progressWrapperMulti').style.display = 'none';
+
+                if (data.error) {
+                    setStatus('statusLabelMulti', '✗ ' + data.error, 'error');
+                    return;
+                }
+
+                setStatus('statusLabelMulti', `✓ Top ${data.results.length} matching captions`, 'success');
+                document.getElementById('timingLabelMulti').textContent = `⏱ ${data.elapsed}s`;
+                displayResults(data.results, false, true);
+            })
+            .catch(err => {
+                btn.disabled = false;
+                btn.textContent = '🔍 Search';
                 document.getElementById('progressWrapperMulti').style.display = 'none';
                 setStatus('statusLabelMulti', '✗ Network error: ' + err.message, 'error');
             });
@@ -428,7 +537,7 @@
         }
 
         // ---- Display results grid ----
-        function displayResults(results, isMultimodal) {
+        function displayResults(results, isTextToImage, isImageToText) {
             const grid = document.getElementById('resultsGrid');
             grid.innerHTML = '';
 
@@ -439,25 +548,34 @@
 
             results.forEach(r => {
                 const card = document.createElement('div');
-                if (isMultimodal) {
-                    card.className = 'result-card multimodal';
+
+                if (isImageToText) {
+                    // Caption card: show source image + caption text
+                    card.className = 'result-card caption-card';
+                    card.onclick = () => openModal(r.image_url, r.source_image);
+                    card.innerHTML = `
+                        <span class="rank-badge">#${r.rank}</span>
+                        <div class="thumb-wrapper">
+                            <img src="${r.image_url}" alt="${r.source_image}" loading="lazy">
+                        </div>
+                        <p class="card-caption" title="${r.caption}">${r.caption}</p>
+                        <p class="card-distance">sim = ${r.similarity.toFixed(4)}</p>
+                    `;
                 } else {
-                    card.className = 'result-card' + (r.is_relevant ? ' relevant' : '');
+                    card.className = 'result-card' + (isTextToImage ? ' multimodal' : (r.is_relevant ? ' relevant' : ''));
+                    card.onclick = () => openModal(r.image_url, r.filename);
+                    const scoreLabel = isTextToImage
+                        ? `sim = ${r.similarity.toFixed(4)}`
+                        : `d = ${r.distance.toFixed(4)}`;
+                    card.innerHTML = `
+                        <span class="rank-badge">#${r.rank}</span>
+                        <div class="thumb-wrapper">
+                            <img src="${r.image_url}" alt="${r.filename}" loading="lazy">
+                        </div>
+                        <p class="card-filename" title="${r.filename}">${r.filename.length > 22 ? r.filename.slice(0, 19) + '...' : r.filename}</p>
+                        <p class="card-distance">${scoreLabel}</p>
+                    `;
                 }
-                card.onclick = () => openModal(r.image_url, r.filename);
-
-                const scoreLabel = isMultimodal
-                    ? `sim = ${r.similarity.toFixed(4)}`
-                    : `d = ${r.distance.toFixed(4)}`;
-
-                card.innerHTML = `
-                    <span class="rank-badge">#${r.rank}</span>
-                    <div class="thumb-wrapper">
-                        <img src="${r.image_url}" alt="${r.filename}" loading="lazy">
-                    </div>
-                    <p class="card-filename" title="${r.filename}">${r.filename.length > 22 ? r.filename.slice(0, 19) + '...' : r.filename}</p>
-                    <p class="card-distance">${scoreLabel}</p>
-                `;
 
                 grid.appendChild(card);
             });
@@ -474,12 +592,10 @@
             document.getElementById('imageModal').classList.remove('active');
         }
 
-        // close modal on Escape
         document.addEventListener('keydown', e => {
             if (e.key === 'Escape') closeModal();
         });
 
-        // Enter key in text query triggers search
         document.getElementById('textQuery').addEventListener('keydown', e => {
             if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();

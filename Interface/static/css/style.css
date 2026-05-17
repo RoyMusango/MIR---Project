@@ -767,3 +767,53 @@ body {
         padding: 6px 12px;
     }
 }
+
+/* ── Mode toggle buttons (multimodal) ── */
+.mode-btn {
+    flex: 1;
+    padding: 8px 10px;
+    background: #1e2132;
+    border: 1px solid #2e3246;
+    border-radius: 8px;
+    color: #6e7389;
+    font-size: 12px;
+    font-weight: 600;
+    font-family: 'Inter', sans-serif;
+    cursor: pointer;
+    transition: all 0.2s;
+    white-space: nowrap;
+}
+
+.mode-btn:hover {
+    color: #c9cdd8;
+    border-color: #3a3d55;
+}
+
+.mode-btn.active {
+    background: linear-gradient(135deg, rgba(102, 126, 234, 0.15), rgba(118, 75, 162, 0.1));
+    border-color: rgba(102, 126, 234, 0.4);
+    color: #e8ecf4;
+}
+
+/* ── Caption card (image-to-text results) ── */
+.result-card.caption-card {
+    border-color: rgba(118, 75, 162, 0.3);
+}
+
+.result-card.caption-card:hover {
+    border-color: #764ba2;
+    box-shadow: 0 8px 25px rgba(118, 75, 162, 0.15);
+}
+
+.card-caption {
+    color: #b0b5c5;
+    font-size: 10px;
+    text-align: center;
+    z-index: 1;
+    max-width: 100%;
+    line-height: 1.4;
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
