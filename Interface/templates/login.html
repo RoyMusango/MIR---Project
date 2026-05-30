@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MIR ULTIMATE ENGINE — Authenticate</title>
+    <link rel="icon" href="{{ url_for('static', filename='img/logo.svg') }}" type="image/svg+xml">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <style>
+        body {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0;
+        }
+        .login-container {
+            width: 100%;
+            max-width: 420px;
+            padding: 0 24px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 28px;
+            position: relative;
+            z-index: 1;
+        }
+        .login-logo {
+            width: 140px;
+            height: auto;
+            filter: drop-shadow(0 0 24px rgba(0, 255, 209, 0.35));
+        }
+        .login-brand { text-align: center; }
+        .login-brand-title {
+            font-family: 'Orbitron', monospace;
+            font-size: 26px;
+            font-weight: 800;
+            color: #fff;
+            letter-spacing: 4px;
+            margin: 0 0 6px;
+        }
+        .login-brand-sub {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 11px;
+            color: #5A6478;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            margin: 0;
+        }
+        .login-card {
+            width: 100%;
+            background: rgba(21, 23, 30, 0.85);
+            border: 1px solid #2A2F3E;
+            border-radius: 12px;
+            padding: 32px;
+            backdrop-filter: blur(16px);
+            box-sizing: border-box;
+        }
+        .login-fields {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        .login-field {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+        .login-label {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 10px;
+            color: #00FFD1;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+        }
+        .login-input {
+            background: #0F1116;
+            border: 1px solid #2A2F3E;
+            border-radius: 6px;
+            padding: 12px 14px;
+            color: #DDE2EA;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 13px;
+            width: 100%;
+            box-sizing: border-box;
+            outline: none;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+        .login-input:focus {
+            border-color: #00FFD1;
+            box-shadow: 0 0 0 3px rgba(0, 255, 209, 0.08);
+        }
+        .login-btn {
+            background: linear-gradient(135deg, #00FFD1 0%, #00B4D8 100%);
+            color: #0F1116;
+            border: none;
+            border-radius: 6px;
+            padding: 13px;
+            font-family: 'Orbitron', monospace;
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 3px;
+            cursor: pointer;
+            width: 100%;
+            margin-top: 8px;
+            transition: opacity 0.2s, transform 0.1s;
+        }
+        .login-btn:hover  { opacity: 0.88; transform: translateY(-1px); }
+        .login-btn:active { transform: translateY(0); }
+        .login-error {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 11px;
+            color: #FF4C6A;
+            text-align: center;
+            padding: 10px 14px;
+            background: rgba(255, 76, 106, 0.07);
+            border: 1px solid rgba(255, 76, 106, 0.22);
+            border-radius: 6px;
+            margin-bottom: 20px;
+            letter-spacing: 0.5px;
+        }
+        .login-footer {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 10px;
+            color: #2A2F3E;
+            letter-spacing: 1px;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <div class="bg-orb bg-orb-1"></div>
+    <div class="bg-orb bg-orb-2"></div>
+
+    <div class="login-container">
+
+        <img src="{{ url_for('static', filename='img/logo.png') }}"
+             alt="MIR Logo" class="login-logo">
+
+        <div class="login-brand">
+            <h1 class="login-brand-title">MIR ULTIMATE ENGINE</h1>
+            <p class="login-brand-sub">Multimedia Image Retrieval · Group 07</p>
+        </div>
+
+        <div class="login-card">
+            {% if error %}
+            <div class="login-error">⚠ {{ error }}</div>
+            {% endif %}
+
+            <form method="POST" action="/login">
+                <div class="login-fields">
+                    <div class="login-field">
+                        <label class="login-label" for="username">Username</label>
+                        <input class="login-input" type="text" id="username" name="username"
+                               placeholder="> enter username" autocomplete="username" autofocus>
+                    </div>
+                    <div class="login-field">
+                        <label class="login-label" for="password">Password</label>
+                        <input class="login-input" type="password" id="password" name="password"
+                               placeholder="> enter password" autocomplete="current-password">
+                    </div>
+                    <button class="login-btn" type="submit">▶ AUTHENTICATE</button>
+                </div>
+            </form>
+        </div>
+
+        <p class="login-footer">I-ILIA-014 · UMONS · 2025–2026</p>
+    </div>
+
+    <script type="module">
+        import { animate, stagger } from "https://cdn.jsdelivr.net/npm/motion@10.18.0/+esm";
+        animate(".login-logo",
+            { opacity: [0, 1], y: [-24, 0], scale: [0.88, 1] },
+            { duration: 0.7, easing: [0.16, 1, 0.3, 1] }
+        );
+        animate(".login-brand",
+            { opacity: [0, 1], y: [10, 0] },
+            { duration: 0.5, delay: 0.2, easing: "ease-out" }
+        );
+        animate(".login-card",
+            { opacity: [0, 1], y: [20, 0] },
+            { duration: 0.55, delay: 0.32, easing: [0.16, 1, 0.3, 1] }
+        );
+        animate(".login-footer",
+            { opacity: [0, 0.4] },
+            { duration: 0.4, delay: 0.6 }
+        );
+    </script>
+</body>
+</html>

@@ -3,23 +3,49 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MIR — Image Retrieval Engine</title>
+    <title>MIR ULTIMATE ENGINE — Image Retrieval System</title>
     <meta name="description" content="Multimedia Image Retrieval search engine — Unimodal and Multimodal search with CLIP">
+
+    <!-- Distinctive cyberpunk fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="icon" href="{{ url_for('static', filename='img/logo.svg') }}" type="image/svg+xml">
 </head>
 <body>
 
-    <!-- Top Navbar -->
+    <!-- Atmospheric background orbs -->
+    <div class="bg-orb bg-orb-1"></div>
+    <div class="bg-orb bg-orb-2"></div>
+
+    <!-- ============ HUD STATUS BAR ============ -->
+    <div class="hud-bar">
+        <div class="hud-item"><span class="hud-dot"></span> SYS_ONLINE</div>
+        <div class="hud-item">VLM <span class="hud-val" id="hudActiveBackbone">CLIP ViT-B/32</span></div>
+        <div class="hud-item">FAISS <span class="hud-val">READY</span></div>
+        <div class="hud-item">INDEX <span class="hud-val">5,000 IMG · 40,460 CAPT</span></div>
+        <div class="hud-spacer"></div>
+        <div class="hud-item">GROUP_07</div>
+        <div class="hud-item"><span class="hud-dot amber"></span> © 2026</div>
+        <a class="hud-item" href="/logout" style="color:#FF4C6A;text-decoration:none;cursor:pointer;letter-spacing:inherit;">⏻ LOGOUT</a>
+    </div>
+
+    <!-- ============ TOP NAVBAR ============ -->
     <nav class="top-navbar" id="topNavbar">
-        <div class="nav-brand">MIR Engine</div>
+        <div class="nav-brand">
+            <a href="/" style="display:flex;align-items:center;gap:10px;text-decoration:none;color:inherit;">
+                <img src="{{ url_for('static', filename='img/logo.png') }}" alt="logo" style="height:32px;width:auto;">
+                MIR ULTIMATE ENGINE
+            </a>
+        </div>
         <div class="nav-tabs">
             <button class="nav-tab active" id="tabUnimodal" onclick="switchMode('unimodal')">
-                <span class="nav-tab-icon">🖼️</span> Unimodal Image Search
+                <span class="nav-tab-icon">◳</span> UNIMODAL
             </button>
             <button class="nav-tab" id="tabMultimodal" onclick="switchMode('multimodal')">
-                <span class="nav-tab-icon">🔗</span> Multimodal Search
+                <span class="nav-tab-icon">⬡</span> MULTIMODAL
             </button>
         </div>
     </nav>
@@ -30,8 +56,8 @@
         <aside class="sidebar" id="sidebarUnimodal">
             <div class="sidebar-scroll">
                 <div class="brand">
-                    <h1 class="brand-title">Unimodal Search</h1>
-                    <p class="brand-sub">Image-to-Image Retrieval (Cars)</p>
+                    <h1 class="brand-title">UNIMODAL</h1>
+                    <p class="brand-sub">image-to-image · cars db</p>
                 </div>
 
                 <div class="divider"></div>
@@ -43,7 +69,7 @@
                         <span class="placeholder-text">No image selected</span>
                     </div>
                     <label class="browse-btn" for="queryInput">
-                        📁 Browse Image…
+                        ↑ Browse Image
                         <input type="file" id="queryInput" accept="image/*" hidden>
                     </label>
                 </div>
@@ -61,15 +87,15 @@
                     <label class="checkbox-item"><input type="checkbox" name="descriptor" value="LBP (Texture)" data-group="vector"> LBP (Texture)</label>
                     <label class="checkbox-item"><input type="checkbox" name="descriptor" value="HOG (Shape)" data-group="vector"> HOG (Shape)</label>
 
-                    <span class="group-label" style="margin-top: 8px;">Deep Learning</span>
-                    <label class="checkbox-item"><input type="checkbox" name="descriptor" value="ResNet50 (CNN)" data-group="vector"> ResNet50 (CNN) 🧠</label>
-                    <label class="checkbox-item"><input type="checkbox" name="descriptor" value="CLIP (ViT)" data-group="vector"> CLIP ViT-B/32 🧠</label>
+                    <span class="group-label">Deep Learning</span>
+                    <label class="checkbox-item"><input type="checkbox" name="descriptor" value="ResNet50 (CNN)" data-group="vector"> ResNet50 · CNN</label>
+                    <label class="checkbox-item"><input type="checkbox" name="descriptor" value="CLIP (ViT)" data-group="vector"> CLIP ViT-B/32</label>
 
-                    <span class="group-label" style="margin-top: 8px;">Keypoint-based</span>
+                    <span class="group-label">Keypoint-based</span>
                     <label class="checkbox-item"><input type="checkbox" name="descriptor" value="SIFT (Keypoints)" data-group="keypoint"> SIFT (Keypoints)</label>
                     <label class="checkbox-item"><input type="checkbox" name="descriptor" value="ORB (Keypoints)" data-group="keypoint"> ORB (Keypoints)</label>
 
-                    <p class="combo-info" id="comboInfo" style="display:none;">⚡ Distances will be normalized and averaged</p>
+                    <p class="combo-info" id="comboInfo" style="display:none;">⚡ Distances normalized &amp; averaged</p>
                 </div>
 
                 <div class="divider"></div>
@@ -86,16 +112,21 @@
                     </select>
                 </div>
 
-                <!-- K slider -->
+                <!-- K slider with Top-20/50/100 presets -->
                 <div class="section">
-                    <span class="section-title" id="kLabel">RESULTS: 10</span>
-                    <input type="range" id="kSlider" min="1" max="100" value="10" class="slider">
+                    <span class="section-title" id="kLabel">RESULTS: 50</span>
+                    <input type="range" id="kSlider" min="1" max="100" value="50" class="slider">
+                    <div class="k-presets">
+                        <button type="button" class="k-preset" data-k="20">TOP_20</button>
+                        <button type="button" class="k-preset active" data-k="50">TOP_50</button>
+                        <button type="button" class="k-preset" data-k="100">TOP_100</button>
+                    </div>
                 </div>
 
                 <div class="divider"></div>
 
                 <!-- Search button -->
-                <button class="search-btn" id="searchBtn" onclick="doSearch()">🔍 Search</button>
+                <button class="search-btn" id="searchBtn" onclick="doSearch()">▶ EXECUTE SEARCH</button>
 
                 <!-- Progress -->
                 <div class="progress-wrapper" id="progressWrapper" style="display:none;">
@@ -111,17 +142,17 @@
 
                 <!-- Metrics panel -->
                 <div class="metrics-panel" id="metricsPanel" style="display:none;">
-                    <span class="metrics-title">EVALUATION METRICS</span>
+                    <span class="metrics-title">// EVALUATION METRICS</span>
                     <p class="metric-info" id="queryClassInfo"></p>
                     <p class="metric-info italic" id="descUsedInfo"></p>
 
-                    <span class="metrics-subtitle">Top 50</span>
+                    <span class="metrics-subtitle">@ Top 50</span>
                     <p class="metric-value" id="p50">Precision: —</p>
                     <p class="metric-value" id="r50">Recall: —</p>
                     <p class="metric-value" id="ap50">AP: —</p>
                     <p class="metric-value" id="rprec50">R-Precision: —</p>
 
-                    <span class="metrics-subtitle">Top 100</span>
+                    <span class="metrics-subtitle">@ Top 100</span>
                     <p class="metric-value" id="p100">Precision: —</p>
                     <p class="metric-value" id="r100">Recall: —</p>
                     <p class="metric-value" id="ap100">AP: —</p>
@@ -137,8 +168,21 @@
         <aside class="sidebar" id="sidebarMultimodal" style="display:none;">
             <div class="sidebar-scroll">
                 <div class="brand">
-                    <h1 class="brand-title">Multimodal Search</h1>
-                    <p class="brand-sub">CLIP · Flickr8k · FAISS</p>
+                    <h1 class="brand-title">MULTIMODAL</h1>
+                    <p class="brand-sub">clip · flickr8k · faiss</p>
+                </div>
+
+                <div class="divider"></div>
+
+                <!-- Backbone selector (Phase 3) -->
+                <div class="section">
+                    <span class="section-title">VLM BACKBONE</span>
+                    <select id="backboneSelect" class="select-input" onchange="onBackboneChange()">
+                        <option value="">Loading…</option>
+                    </select>
+                    <p class="metric-info" id="backboneStatus" style="margin-top:4px; opacity:0.75;">
+                        Loading available backbones…
+                    </p>
                 </div>
 
                 <div class="divider"></div>
@@ -147,8 +191,8 @@
                 <div class="section">
                     <span class="section-title">SEARCH MODE</span>
                     <div style="display:flex; gap:8px; margin-top:6px;">
-                        <button class="mode-btn active" id="btnTextToImage" onclick="switchMultiMode('text2img')">📝 Text → Image</button>
-                        <button class="mode-btn" id="btnImageToText" onclick="switchMultiMode('img2text')">🖼️ Image → Text</button>
+                        <button class="mode-btn active" id="btnTextToImage" onclick="switchMultiMode('text2img')">TXT → IMG</button>
+                        <button class="mode-btn" id="btnImageToText" onclick="switchMultiMode('img2text')">IMG → TXT</button>
                     </div>
                 </div>
 
@@ -157,7 +201,7 @@
                 <!-- Text query input -->
                 <div class="section" id="textQuerySection">
                     <span class="section-title">TEXT QUERY</span>
-                    <textarea class="text-input" id="textQuery" placeholder="Describe the image you're looking for…&#10;e.g. a dog running on the beach" rows="4"></textarea>
+                    <textarea class="text-input" id="textQuery" placeholder="> describe the image you seek...&#10;> e.g. a dog running on the beach" rows="4"></textarea>
                 </div>
 
                 <!-- Image query input (image-to-text) -->
@@ -167,7 +211,7 @@
                         <span class="placeholder-text">No image selected</span>
                     </div>
                     <label class="browse-btn" for="queryInputMulti">
-                        📁 Browse Image…
+                        ↑ Browse Image
                         <input type="file" id="queryInputMulti" accept="image/*" hidden>
                     </label>
                 </div>
@@ -183,7 +227,7 @@
                 <div class="divider"></div>
 
                 <!-- Search button -->
-                <button class="search-btn" id="searchBtnMulti" onclick="doMultiSearch()">🔍 Search</button>
+                <button class="search-btn" id="searchBtnMulti" onclick="doMultiSearch()">▶ EXECUTE SEARCH</button>
 
                 <!-- Progress -->
                 <div class="progress-wrapper" id="progressWrapperMulti" style="display:none;">
@@ -198,9 +242,9 @@
                 <div class="divider"></div>
 
                 <div class="clip-info-panel">
-                    <span class="metrics-title">HOW IT WORKS</span>
+                    <span class="metrics-title">// HOW IT WORKS</span>
                     <p class="metric-info" id="clipInfoText">CLIP encodes your text query and compares it with pre-computed image embeddings from Flickr8k using FAISS for fast k-NN search.</p>
-                    <p class="metric-info italic" style="margin-top:6px;">~8,000 images · 40,455 captions · 512-dim vectors</p>
+                    <p class="metric-info italic" style="margin-top:6px;">8,091 img · 40,460 capt · 512-d</p>
                 </div>
             </div>
         </aside>
@@ -209,7 +253,7 @@
         <main class="content" id="content">
             <h2 class="results-header" id="resultsHeader">Results</h2>
             <div class="results-grid" id="resultsGrid">
-                <p class="no-results" id="placeholder">Select an image and click Search to find similar cars</p>
+                <p class="no-results" id="placeholder">Select an image and click EXECUTE to find similar cars</p>
             </div>
         </main>
     </div>
@@ -223,6 +267,73 @@
         </div>
     </div>
 
+    <!-- ===================================================================
+         MOTION ONE — Framer Motion's animation engine, vanilla JS, via CDN
+         (same author Matt Perry; no React needed)
+         =================================================================== -->
+    <script type="module">
+        import { animate, stagger, inView } from "https://cdn.jsdelivr.net/npm/motion@10.18.0/+esm";
+        window.__motion = { animate, stagger, inView };
+
+        // Page-load entrance: navbar + hud + sidebar sections
+        animate(".hud-bar",
+            { opacity: [0, 1], y: [-8, 0] },
+            { duration: 0.5, easing: "ease-out" }
+        );
+        animate(".top-navbar",
+            { opacity: [0, 1], y: [-20, 0] },
+            { duration: 0.6, delay: 0.1, easing: [0.16, 1, 0.3, 1] }
+        );
+        animate(".sidebar .brand, .sidebar .divider, .sidebar .section, .sidebar .metrics-panel, .sidebar .clip-info-panel, .sidebar .search-btn",
+            { opacity: [0, 1], x: [-24, 0] },
+            { duration: 0.5, delay: stagger(0.04, { start: 0.25 }), easing: [0.16, 1, 0.3, 1] }
+        );
+        animate(".content .results-header",
+            { opacity: [0, 1], y: [12, 0] },
+            { duration: 0.6, delay: 0.45, easing: "ease-out" }
+        );
+        animate(".content .no-results",
+            { opacity: [0, 1], scale: [0.98, 1] },
+            { duration: 0.6, delay: 0.55, easing: "ease-out" }
+        );
+
+        // Expose helpers used by the app JS below
+        window.__motion.animateResults = () => {
+            const cards = document.querySelectorAll(".result-card");
+            if (!cards.length) return;
+            animate(cards,
+                { opacity: [0, 1], y: [24, 0], scale: [0.96, 1] },
+                { duration: 0.45, delay: stagger(0.035), easing: [0.16, 1, 0.3, 1] }
+            );
+        };
+        window.__motion.animateMetrics = () => {
+            animate(".metrics-panel",
+                { opacity: [0, 1], scale: [0.97, 1] },
+                { duration: 0.5, easing: [0.16, 1, 0.3, 1] }
+            );
+            animate(".metrics-panel .metric-value",
+                { opacity: [0, 1], x: [-10, 0] },
+                { duration: 0.4, delay: stagger(0.04, { start: 0.15 }), easing: "ease-out" }
+            );
+        };
+        window.__motion.animateModalOpen = () => {
+            animate(".modal-content img",
+                { opacity: [0, 1], scale: [0.92, 1] },
+                { duration: 0.45, easing: [0.16, 1, 0.3, 1] }
+            );
+        };
+        window.__motion.animateSidebarSwitch = (which) => {
+            const el = document.getElementById(which === 'unimodal' ? 'sidebarUnimodal' : 'sidebarMultimodal');
+            animate(el.querySelectorAll('.brand, .divider, .section, .metrics-panel, .clip-info-panel, .search-btn'),
+                { opacity: [0, 1], x: [-16, 0] },
+                { duration: 0.4, delay: stagger(0.03), easing: [0.16, 1, 0.3, 1] }
+            );
+        };
+    </script>
+
+    <!-- ===================================================================
+         APP LOGIC — same as original, preserves all endpoints & IDs
+         =================================================================== -->
     <script>
         // ---- State ----
         let selectedFile = null;
@@ -244,12 +355,17 @@
             const header = document.getElementById('resultsHeader');
             header.textContent = 'Results';
             if (mode === 'unimodal') {
-                grid.innerHTML = '<p class="no-results">Select an image and click Search to find similar cars</p>';
+                grid.innerHTML = '<p class="no-results">Select an image and click EXECUTE to find similar cars</p>';
             } else {
                 grid.innerHTML = '<p class="no-results">Enter a text description or upload an image to search Flickr8k</p>';
             }
 
             document.getElementById('metricsPanel').style.display = 'none';
+
+            // animate the now-visible sidebar
+            if (window.__motion?.animateSidebarSwitch) {
+                window.__motion.animateSidebarSwitch(mode);
+            }
         }
 
         // ---- Multimodal sub-mode switching ----
@@ -264,7 +380,7 @@
             if (mode === 'text2img') {
                 info.textContent = 'CLIP encodes your text query and compares it with pre-computed image embeddings from Flickr8k using FAISS for fast k-NN search.';
             } else {
-                info.textContent = 'CLIP encodes your query image and finds the most semantically matching captions from the 40,455 Flickr8k descriptions using FAISS.';
+                info.textContent = 'CLIP encodes your query image and finds the most semantically matching captions from the 40,460 Flickr8k descriptions using FAISS.';
             }
         }
 
@@ -350,16 +466,104 @@
             });
         }
 
-        // ---- K sliders ----
-        document.getElementById('kSlider').addEventListener('input', function() {
-            document.getElementById('kLabel').textContent = 'RESULTS: ' + this.value;
+        // ---- K sliders & quick presets ----
+        const kSlider = document.getElementById('kSlider');
+        const kLabel  = document.getElementById('kLabel');
+        kSlider.addEventListener('input', function() {
+            kLabel.textContent = 'RESULTS: ' + this.value;
+            document.querySelectorAll('.k-preset').forEach(b => {
+                b.classList.toggle('active', String(b.dataset.k) === String(this.value));
+            });
+        });
+        document.querySelectorAll('.k-preset').forEach(btn => {
+            btn.addEventListener('click', () => {
+                kSlider.value = btn.dataset.k;
+                kLabel.textContent = 'RESULTS: ' + btn.dataset.k;
+                document.querySelectorAll('.k-preset').forEach(b => b.classList.toggle('active', b === btn));
+            });
         });
 
         document.getElementById('kSliderMulti').addEventListener('input', function() {
             document.getElementById('kLabelMulti').textContent = 'RESULTS: ' + this.value;
         });
 
+        // ─────────────────────────────────────────────────────────────
+        // Phase 3 · VLM Backbone selector
+        // Populates the dropdown from /backbones, keeps HUD label in sync,
+        // and shows a brief "loading" state while the user-perceived
+        // backbone switch happens (the actual FAISS swap is backend-side).
+        // ─────────────────────────────────────────────────────────────
+        let __backboneRegistry = [];
+        let __activeBackbone   = null;
+
+        function getActiveBackbone() { return __activeBackbone; }
+
+        function updateHudBackbone(displayName) {
+            const el = document.getElementById('hudActiveBackbone');
+            if (el) el.textContent = displayName;
+        }
+
+        function onBackboneChange() {
+            const sel = document.getElementById('backboneSelect');
+            const key = sel.value;
+            if (!key) return;
+            __activeBackbone = key;
+            const meta = __backboneRegistry.find(b => b.key === key);
+            if (meta) {
+                updateHudBackbone(meta.display_name);
+                const status = document.getElementById('backboneStatus');
+                if (status) {
+                    status.textContent = meta.loaded
+                        ? `▸ active · resident in memory`
+                        : `▸ active · will load on next search`;
+                }
+            }
+        }
+
+        function bootstrapBackbones() {
+            const sel    = document.getElementById('backboneSelect');
+            const status = document.getElementById('backboneStatus');
+            if (!sel) return; // multimodal sidebar may not be in DOM in some templates
+
+            fetch('/backbones')
+                .then(r => r.json())
+                .then(data => {
+                    __backboneRegistry = data.backbones || [];
+                    if (__backboneRegistry.length === 0) {
+                        sel.innerHTML = '<option value="">none available</option>';
+                        if (status) status.textContent = '⚠ no backbones registered';
+                        return;
+                    }
+                    sel.innerHTML = '';
+                    __backboneRegistry.forEach(b => {
+                        const opt = document.createElement('option');
+                        opt.value = b.key;
+                        opt.textContent = b.display_name + (b.loaded ? '  ●' : '');
+                        sel.appendChild(opt);
+                    });
+                    const defaultKey = data.default || __backboneRegistry[0].key;
+                    sel.value = defaultKey;
+                    onBackboneChange();
+                    if (status && typeof data.max_resident === 'number') {
+                        const cap = data.max_resident;
+                        status.textContent += `  ·  cache: ${cap} resident`;
+                    }
+                })
+                .catch(err => {
+                    sel.innerHTML = '<option value="">/backbones unavailable</option>';
+                    if (status) status.textContent = '⚠ ' + err.message;
+                });
+        }
+
+        // Init on DOM ready
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', bootstrapBackbones);
+        } else {
+            bootstrapBackbones();
+        }
+
         // ---- Unimodal Search ----
+        
         function doSearch() {
             if (!selectedFile) {
                 setStatus('statusLabel', '⚠ Please select a query image first.', 'error');
@@ -380,9 +584,21 @@
 
             const btn = document.getElementById('searchBtn');
             btn.disabled = true;
-            btn.textContent = 'Searching…';
-            document.getElementById('progressWrapper').style.display = 'block';
-            document.getElementById('progressFill').style.width = '30%';
+            btn.textContent = 'PROCESSING…';
+            
+            // --- PROGRESS BAR START ---
+            const progressWrapper = document.getElementById('progressWrapper');
+            const progressFill = document.getElementById('progressFill');
+            progressWrapper.style.display = 'block';
+            progressFill.style.width = '0%';
+            
+            let currentProgress = 0;
+            const progressInterval = setInterval(() => {
+                currentProgress += (95 - currentProgress) * 0.05; 
+                progressFill.style.width = `${currentProgress}%`;
+            }, 300);
+            // --------------------------
+
             setStatus('statusLabel', 'Extracting features & comparing…', 'active');
             document.getElementById('timingLabel').textContent = '';
 
@@ -390,53 +606,58 @@
             .then(r => r.json())
             .then(data => {
                 btn.disabled = false;
-                btn.textContent = '🔍 Search';
-                document.getElementById('progressWrapper').style.display = 'none';
+                btn.textContent = '▶ EXECUTE SEARCH';
+                
+                // --- PROGRESS BAR SUCCESS ---
+                clearInterval(progressInterval);
+                progressFill.style.width = '100%';
+                setTimeout(() => { progressWrapper.style.display = 'none'; }, 500);
+                // ----------------------------
 
                 if (data.error) {
                     setStatus('statusLabel', '✗ ' + data.error, 'error');
                     return;
                 }
 
-                setStatus('statusLabel', `✓ Found ${data.total_results} results (showing ${data.results.length})`, 'success');
-                document.getElementById('timingLabel').textContent = `⏱ ${data.elapsed}s`;
+                setStatus('statusLabel', `✓ ${data.total_results} results · showing ${data.results.length}`, 'success');
+                document.getElementById('timingLabel').textContent = `⧗ ${data.elapsed}s`;
 
                 // Update all metrics
                 const mp = document.getElementById('metricsPanel');
                 mp.style.display = 'block';
-                document.getElementById('queryClassInfo').textContent = `Query class: ${data.query_class} (${data.total_relevant} in DB)`;
+                document.getElementById('queryClassInfo').textContent = `class: ${data.query_class} · relevant in DB: ${data.total_relevant}`;
                 document.getElementById('descUsedInfo').textContent = data.descriptors_used;
 
-                document.getElementById('p50').textContent    = `Precision: ${data.metrics.p50}%`;
-                document.getElementById('r50').textContent    = `Recall: ${data.metrics.r50}%`;
-                document.getElementById('ap50').textContent   = `AP: ${data.metrics.ap50}%`;
-                document.getElementById('rprec50').textContent = `R-Precision: ${data.metrics.rprec50}%`;
+                document.getElementById('p50').textContent    = `> Precision = ${data.metrics.p50}%`;
+                document.getElementById('r50').textContent    = `> Recall = ${data.metrics.r50}%`;
+                document.getElementById('ap50').textContent   = `> AP = ${data.metrics.ap50}%`;
+                document.getElementById('rprec50').textContent = `> R-Prec = ${data.metrics.rprec50}%`;
 
-                document.getElementById('p100').textContent    = `Precision: ${data.metrics.p100}%`;
-                document.getElementById('r100').textContent    = `Recall: ${data.metrics.r100}%`;
-                document.getElementById('ap100').textContent   = `AP: ${data.metrics.ap100}%`;
-                document.getElementById('rprec100').textContent = `R-Precision: ${data.metrics.rprec100}%`;
+                document.getElementById('p100').textContent    = `> Precision = ${data.metrics.p100}%`;
+                document.getElementById('r100').textContent    = `> Recall = ${data.metrics.r100}%`;
+                document.getElementById('ap100').textContent   = `> AP = ${data.metrics.ap100}%`;
+                document.getElementById('rprec100').textContent = `> R-Prec = ${data.metrics.rprec100}%`;
 
-                document.getElementById('mapScore').textContent = `mAP: ${data.metrics.map}%`;
+                document.getElementById('mapScore').textContent = `> mAP = ${data.metrics.map}%`;
 
                 displayResults(data.results, false);
+
+                if (window.__motion?.animateMetrics) window.__motion.animateMetrics();
+                if (window.__motion?.animateResults) window.__motion.animateResults();
             })
             .catch(err => {
                 btn.disabled = false;
-                btn.textContent = '🔍 Search';
-                document.getElementById('progressWrapper').style.display = 'none';
+                btn.textContent = '▶ EXECUTE SEARCH';
+                
+                // --- PROGRESS BAR ERROR ---
+                clearInterval(progressInterval);
+                progressWrapper.style.display = 'none';
+                // --------------------------
+                
                 setStatus('statusLabel', '✗ Network error: ' + err.message, 'error');
             });
         }
 
-        // ---- Multimodal Search dispatcher ----
-        function doMultiSearch() {
-            if (currentMultiMode === 'text2img') {
-                doTextSearch();
-            } else {
-                doImageToTextSearch();
-            }
-        }
 
         // ---- Text → Image Search ----
         function doTextSearch() {
@@ -449,36 +670,64 @@
             const k = document.getElementById('kSliderMulti').value;
             const btn = document.getElementById('searchBtnMulti');
             btn.disabled = true;
-            btn.textContent = 'Searching…';
-            document.getElementById('progressWrapperMulti').style.display = 'block';
-            document.getElementById('progressFillMulti').style.width = '30%';
+            btn.textContent = 'PROCESSING…';
+            
+            // --- PROGRESS BAR START ---
+            const progressWrapper = document.getElementById('progressWrapperMulti');
+            const progressFill = document.getElementById('progressFillMulti');
+            progressWrapper.style.display = 'block';
+            progressFill.style.width = '0%';
+            
+            let currentProgress = 0;
+            const progressInterval = setInterval(() => {
+                currentProgress += (95 - currentProgress) * 0.05; 
+                progressFill.style.width = `${currentProgress}%`;
+            }, 300);
+            // --------------------------
+
             setStatus('statusLabelMulti', 'Encoding text & searching with FAISS…', 'active');
             document.getElementById('timingLabelMulti').textContent = '';
 
             fetch('/search_text', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ query: query, k: parseInt(k) })
+                body: JSON.stringify({
+                    query: query,
+                    k: parseInt(k),
+                    backbone: getActiveBackbone()
+                })
             })
             .then(r => r.json())
             .then(data => {
                 btn.disabled = false;
-                btn.textContent = '🔍 Search';
-                document.getElementById('progressWrapperMulti').style.display = 'none';
+                btn.textContent = '▶ EXECUTE SEARCH';
+                
+                // --- PROGRESS BAR SUCCESS ---
+                clearInterval(progressInterval);
+                progressFill.style.width = '100%';
+                setTimeout(() => { progressWrapper.style.display = 'none'; }, 500);
+                // ----------------------------
 
                 if (data.error) {
                     setStatus('statusLabelMulti', '✗ ' + data.error, 'error');
                     return;
                 }
 
-                setStatus('statusLabelMulti', `✓ Top ${data.results.length} matches from ${data.total_results} images`, 'success');
-                document.getElementById('timingLabelMulti').textContent = `⏱ ${data.elapsed}s`;
+                setStatus('statusLabelMulti', `✓ Top ${data.results.length} / ${data.total_results}`, 'success');
+                document.getElementById('timingLabelMulti').textContent = `⧗ ${data.elapsed}s`;
+                if (data.backbone_display) updateHudBackbone(data.backbone_display);
                 displayResults(data.results, true, false);
+                if (window.__motion?.animateResults) window.__motion.animateResults();
             })
             .catch(err => {
                 btn.disabled = false;
-                btn.textContent = '🔍 Search';
-                document.getElementById('progressWrapperMulti').style.display = 'none';
+                btn.textContent = '▶ EXECUTE SEARCH';
+                
+                // --- PROGRESS BAR ERROR ---
+                clearInterval(progressInterval);
+                progressWrapper.style.display = 'none';
+                // --------------------------
+                
                 setStatus('statusLabelMulti', '✗ Network error: ' + err.message, 'error');
             });
         }
@@ -494,12 +743,25 @@
             const formData = new FormData();
             formData.append('query_image', selectedFileMulti);
             formData.append('k', k);
+            formData.append('backbone', getActiveBackbone());
 
             const btn = document.getElementById('searchBtnMulti');
             btn.disabled = true;
-            btn.textContent = 'Searching…';
-            document.getElementById('progressWrapperMulti').style.display = 'block';
-            document.getElementById('progressFillMulti').style.width = '30%';
+            btn.textContent = 'PROCESSING…';
+            
+            // --- PROGRESS BAR START ---
+            const progressWrapper = document.getElementById('progressWrapperMulti');
+            const progressFill = document.getElementById('progressFillMulti');
+            progressWrapper.style.display = 'block';
+            progressFill.style.width = '0%';
+            
+            let currentProgress = 0;
+            const progressInterval = setInterval(() => {
+                currentProgress += (95 - currentProgress) * 0.05; 
+                progressFill.style.width = `${currentProgress}%`;
+            }, 300);
+            // --------------------------
+
             setStatus('statusLabelMulti', 'Encoding image & searching captions with FAISS…', 'active');
             document.getElementById('timingLabelMulti').textContent = '';
 
@@ -507,22 +769,34 @@
             .then(r => r.json())
             .then(data => {
                 btn.disabled = false;
-                btn.textContent = '🔍 Search';
-                document.getElementById('progressWrapperMulti').style.display = 'none';
+                btn.textContent = '▶ EXECUTE SEARCH';
+                
+                // --- PROGRESS BAR SUCCESS ---
+                clearInterval(progressInterval);
+                progressFill.style.width = '100%';
+                setTimeout(() => { progressWrapper.style.display = 'none'; }, 500);
+                // ----------------------------
 
                 if (data.error) {
                     setStatus('statusLabelMulti', '✗ ' + data.error, 'error');
                     return;
                 }
 
-                setStatus('statusLabelMulti', `✓ Top ${data.results.length} matching captions`, 'success');
-                document.getElementById('timingLabelMulti').textContent = `⏱ ${data.elapsed}s`;
+                setStatus('statusLabelMulti', `✓ Top ${data.results.length} captions`, 'success');
+                document.getElementById('timingLabelMulti').textContent = `⧗ ${data.elapsed}s`;
+                if (data.backbone_display) updateHudBackbone(data.backbone_display);
                 displayResults(data.results, false, true);
+                if (window.__motion?.animateResults) window.__motion.animateResults();
             })
             .catch(err => {
                 btn.disabled = false;
-                btn.textContent = '🔍 Search';
-                document.getElementById('progressWrapperMulti').style.display = 'none';
+                btn.textContent = '▶ EXECUTE SEARCH';
+                
+                // --- PROGRESS BAR ERROR ---
+                clearInterval(progressInterval);
+                progressWrapper.style.display = 'none';
+                // --------------------------
+                
                 setStatus('statusLabelMulti', '✗ Network error: ' + err.message, 'error');
             });
         }
@@ -550,8 +824,7 @@
                 const card = document.createElement('div');
 
                 if (isImageToText) {
-                    // Caption card: show source image + caption text
-                    card.className = 'result-card caption-card';
+                    card.className = 'result-card caption-card multimodal';
                     card.onclick = () => openModal(r.image_url, r.source_image);
                     card.innerHTML = `
                         <span class="rank-badge">#${r.rank}</span>
@@ -586,6 +859,7 @@
             document.getElementById('modalImg').src = src;
             document.getElementById('modalFilename').textContent = filename;
             document.getElementById('imageModal').classList.add('active');
+            if (window.__motion?.animateModalOpen) window.__motion.animateModalOpen();
         }
 
         function closeModal() {
@@ -602,6 +876,25 @@
                 doTextSearch();
             }
         });
+
+        // ---- Multi-mode dispatcher ----
+        let __multiMode = 'text2img';
+
+        function switchMultiMode(mode) {
+            __multiMode = mode;
+            document.getElementById('textQuerySection').style.display  = mode === 'text2img' ? '' : 'none';
+            document.getElementById('imageQuerySection').style.display = mode === 'img2text' ? '' : 'none';
+            document.getElementById('btnTextToImage').classList.toggle('active', mode === 'text2img');
+            document.getElementById('btnImageToText').classList.toggle('active', mode === 'img2text');
+        }
+
+        function doMultiSearch() {
+            if (__multiMode === 'text2img') {
+                doTextSearch();
+            } else {
+                doImageToTextSearch();
+            }
+        }
     </script>
 </body>
 </html>

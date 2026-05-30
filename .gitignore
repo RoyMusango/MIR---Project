@@ -234,3 +234,15 @@ Interface/uploads/
 # Environnement virtuel
 venv/
 .env
+
+# Results Folder
+results/
+
+
+#Sensitive/Unnecessary files
+MIR_confidentials.txt
+Flickr8k_text.zip
+Flickr8k_text/
+Final phase/
+Previous version files/
+Project State md files/

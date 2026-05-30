@@ -1,7 +1,13 @@
 import sys
 import os
-
 os.environ['KMP_DUPLICATE_LIB_OK'] = 'TRUE'
+from dotenv import load_dotenv
+load_dotenv(os.path.join(os.path.dirname(__file__), '..', '.env'))
+
+# make project root importable — must come before any local imports
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+sys.path.insert(0, PROJECT_ROOT)
+os.environ.setdefault("MIR_H5_DIR", os.path.join(PROJECT_ROOT, "descriptors", "CLIP_Flickr8k"))
 
 import torch
 import time
@@ -9,15 +15,34 @@ import numpy as np
 import cv2
 from flask import Flask, render_template, request, jsonify, send_from_directory, url_for
 from werkzeug.utils import secure_filename
-
-# make project root importable
-PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-sys.path.insert(0, PROJECT_ROOT)
+import faiss
+from pathlib import Path
+from PIL import Image
+from backbone_manager import manager, BACKBONES, DEFAULT_BACKBONE
+from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
+from werkzeug.security import check_password_hash
+from flask import redirect
 
 import functions as f
 
 app = Flask(__name__)
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max upload
+
+app.secret_key = os.environ.get("MIR_SECRET_KEY", os.urandom(24))
+
+login_manager = LoginManager(app)
+login_manager.login_view = "login"
+login_manager.login_message = ""
+
+
+class _User(UserMixin):
+    def __init__(self, uid: str):
+        self.id = uid
+
+
+@login_manager.user_loader
+def _load_user(uid: str) -> _User | None:
+    return _User(uid) if uid == os.environ.get("MIR_USERNAME", "admin") else None
 
 DATASET_PATH = os.path.join(PROJECT_ROOT, "dataset_voitures", "dataset")
 DESCRIPTORS_PATH = os.path.join(PROJECT_ROOT, "descriptors")
@@ -25,9 +50,9 @@ UPLOAD_FOLDER = os.path.join(os.path.dirname(__file__), "uploads")
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 # Flickr8k paths
-FLICKR8K_DATASET_PATH = os.path.join(PROJECT_ROOT, "Flickr8k_Dataset", "Flicker8k_Dataset")
-FLICKR8K_H5_PATH = os.path.join(DESCRIPTORS_PATH, "CLIP_Flickr8k", "clip_flickr8k.h5")
-FLICKR8K_CAPTIONS_H5_PATH = os.path.join(DESCRIPTORS_PATH, "CLIP_Flickr8k", "clip_flickr8k_captions.h5")
+FLICKR8K_DATASET_PATH = os.path.join(PROJECT_ROOT, "Flickr8k_Dataset")
+
+
 
 # descriptor name -> (folder, function, algo_id) — CLIP removed
 DESCRIPTOR_MAP = {
@@ -50,88 +75,12 @@ KEYPOINT_DISTANCES = ["Brute force", "Flann"]
 
 HIGHER_IS_BETTER = {"Correlation", "Intersection", "Brute force", "Flann"}
 
-# ── Lazy-loaded Flickr8k CLIP data ──────────────────────────────────────
-_flickr8k_data = None
-_flickr8k_captions_data = None
-_faiss_image_index = None
-_faiss_text_index = None
 
 
-def load_flickr8k_embeddings():
-    """Load pre-computed Flickr8k CLIP embeddings from HDF5 (lazy singleton)."""
-    global _flickr8k_data
-    if _flickr8k_data is not None:
-        return _flickr8k_data
-
-    import h5py
-    if not os.path.exists(FLICKR8K_H5_PATH):
-        raise FileNotFoundError(
-            f"Flickr8k CLIP embeddings not found at {FLICKR8K_H5_PATH}. "
-            "Run 'python build_flickr8k_clip_db.py' first."
-        )
-
-    print(f"[CLIP] Loading Flickr8k embeddings from {FLICKR8K_H5_PATH}...")
-    with h5py.File(FLICKR8K_H5_PATH, "r") as hf:
-        embeddings = hf["embeddings"][:]
-        filenames = [fn.decode("utf-8") if isinstance(fn, bytes) else fn for fn in hf["filenames"][:]]
-
-    _flickr8k_data = (filenames, embeddings)
-    print(f"[CLIP] Loaded {len(filenames)} Flickr8k embeddings ({embeddings.shape})")
-    return _flickr8k_data
-
-def load_flickr8k_captions():
-    global _flickr8k_captions_data
-    if _flickr8k_captions_data is not None:
-        return _flickr8k_captions_data
-    import h5py
-    if not os.path.exists(FLICKR8K_CAPTIONS_H5_PATH):
-        raise FileNotFoundError(
-            f"Flickr8k captions embeddings not found at {FLICKR8K_CAPTIONS_H5_PATH}. "
-            "Run 'python build_flickr8k_captions_db.py' first."
-        )
-    print(f"[CLIP] Loading Flickr8k caption embeddings...")
-    with h5py.File(FLICKR8K_CAPTIONS_H5_PATH, "r") as hf:
-        embeddings = hf["embeddings"][:]
-        captions = [c.decode("utf-8") if isinstance(c, bytes) else c for c in hf["captions"][:]]
-        img_files = [fn.decode("utf-8") if isinstance(fn, bytes) else fn for fn in hf["filenames"][:]]
-    _flickr8k_captions_data = (captions, img_files, embeddings)
-    print(f"[CLIP] Loaded {len(captions)} caption embeddings")
-    return _flickr8k_captions_data
-
-
-def get_faiss_image_index():
-    global _faiss_image_index
-    if _faiss_image_index is not None:
-        return _faiss_image_index
-    import faiss
-    filenames, embeddings = load_flickr8k_embeddings()
-    embeddings = embeddings.astype(np.float32)
-    index = faiss.IndexFlatIP(embeddings.shape[1])
-    index.add(embeddings)
-    _faiss_image_index = index
-    print(f"[FAISS] Image index built: {index.ntotal} vectors")
-    return _faiss_image_index
-
-
-def get_faiss_text_index():
-    global _faiss_text_index
-    if _faiss_text_index is not None:
-        return _faiss_text_index
-    import faiss
-    captions, img_files, embeddings = load_flickr8k_captions()
-    embeddings = embeddings.astype(np.float32)
-    index = faiss.IndexFlatIP(embeddings.shape[1])
-    index.add(embeddings)
-    _faiss_text_index = index
-    print(f"[FAISS] Text index built: {index.ntotal} vectors")
-    return _faiss_text_index
 
 def get_image_class(filename):
-    """get class from filename like '0_0_BMW_Serie3_100.jpg' -> '0_0'"""
-    parts = os.path.basename(filename).split("_")
-    if len(parts) >= 2:
-        return f"{parts[0]}_{parts[1]}"
-    return parts[0]
+    """get class from filename like '0_1_BMW_X3_207.jpg' -> '0'"""
+    return str(os.path.basename(filename).split("_")[0])
 
 
 def run_search(query_path, descriptor_keys, distance_name, k):
@@ -218,20 +167,20 @@ def run_search(query_path, descriptor_keys, distance_name, k):
                 combined[fname] = [None] * num_descriptors
             combined[fname][d_idx] = dist
 
-    combined = {k: v for k, v in combined.items() if all(x is not None for x in v)}
+    combined = {fname_key: v for fname_key, v in combined.items() if all(x is not None for x in v)}
     if not combined:
         return None, "No common images found across selected descriptors."
 
     # min-max normalization per descriptor
     for d_idx in range(num_descriptors):
-        vals = [combined[k][d_idx] for k in combined]
+        vals = [combined[fname_key][d_idx] for fname_key in combined]
         min_v, max_v = min(vals), max(vals)
         rng = max_v - min_v + 1e-10
-        for k in combined:
-            normalized = (combined[k][d_idx] - min_v) / rng
+        for fname_key in combined:
+            normalized = (combined[fname_key][d_idx] - min_v) / rng
             if higher_is_better:
                 normalized = 1.0 - normalized
-            combined[k][d_idx] = normalized
+            combined[fname_key][d_idx] = normalized
 
     final_results = []
     for fname, dists in combined.items():
@@ -249,7 +198,7 @@ def build_response(all_results, query_class, total_relevant, elapsed, k, descrip
 
     def compute_metrics(results_slice, total_rel):
         if not results_slice:
-            return 0.0, 0.0, 0.0, 0.0, 0.0
+            return 0.0, 0.0, 0.0, 0.0
         relevant_found = sum(1 for fname, _ in results_slice if get_image_class(fname) == query_class)
         precision = relevant_found / len(results_slice)
         recall = relevant_found / total_rel if total_rel > 0 else 0.0
@@ -268,10 +217,10 @@ def build_response(all_results, query_class, total_relevant, elapsed, k, descrip
         r_prec_hits = sum(1 for fname, _ in results_slice[:r] if get_image_class(fname) == query_class)
         r_precision = r_prec_hits / r if r > 0 else 0.0
 
-        return precision, recall, ap, ap, r_precision
+        return precision, recall, ap, r_precision
 
-    p50, r50, ap50, map50, rprec50 = compute_metrics(all_results[:50], total_relevant)
-    p100, r100, ap100, map100, rprec100 = compute_metrics(all_results[:100], total_relevant)
+    p50,  r50,  ap50,  rprec50  = compute_metrics(all_results[:50],  total_relevant)
+    p100, r100, ap100, rprec100 = compute_metrics(all_results[:100], total_relevant)
 
     top_k = all_results[:k]
     results_list = []
@@ -301,7 +250,7 @@ def build_response(all_results, query_class, total_relevant, elapsed, k, descrip
             "r100":    round(r100 * 100, 1),
             "ap100":   round(ap100 * 100, 1),
             "rprec100":round(rprec100 * 100, 1),
-            "map":     round(((ap50 + ap100) / 2) * 100, 1),
+            "map": round(ap50 * 100, 1) if total_relevant > 0 else 0.0,
         }
     }
 
@@ -309,6 +258,7 @@ def build_response(all_results, query_class, total_relevant, elapsed, k, descrip
 # -- Routes --
 
 @app.route('/')
+@login_required
 def index():
     return render_template('index.html')
 
@@ -329,6 +279,7 @@ def serve_upload(filename):
 
 
 @app.route('/get_distances', methods=['POST'])
+@login_required
 def get_distances():
     """return the right distance list depending on descriptor group"""
     data = request.get_json()
@@ -341,6 +292,7 @@ def get_distances():
 
 
 @app.route('/search', methods=['POST'])
+@login_required
 def search():
     # get the uploaded file
     if 'query_image' not in request.files:
@@ -373,113 +325,137 @@ def search():
     return jsonify(result)
 
 
+
 @app.route('/search_text', methods=['POST'])
+@login_required
 def search_text():
-    """Multimodal text-to-image search using CLIP on Flickr8k."""
-    data = request.get_json()
-    if not data:
-        return jsonify({"error": "Invalid JSON"}), 400
-
-    query = data.get('query', '').strip()
-    k = int(data.get('k', 20))
-
-    if not query:
-        return jsonify({"error": "Please enter a text query"}), 400
-
-    start = time.time()
-
+    t0 = time.perf_counter()
     try:
-        get_faiss_image_index()
-        filenames, _ = load_flickr8k_embeddings()
-    except FileNotFoundError as e:
-        return jsonify({"error": str(e)}), 500
+        backbone_key = _resolve_backbone(request)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
 
-    # Encode text query
-    from clip_model import get_embedder
-    embedder = get_embedder()
-    text_embedding = embedder.encode_text(query)
+    body = request.get_json(silent=True) or {}
+    query = (body.get("query") or "").strip()
+    k     = int(body.get("k") or 20)
+    if not query:
+        return jsonify({"error": "Empty query"}), 400
 
-    # FAISS k-NN search
-    index = get_faiss_image_index()
-    filenames, _ = load_flickr8k_embeddings()
-    query_vec = np.array([text_embedding], dtype=np.float32)
-    scores, indices = index.search(query_vec, k)
+    embedder    = manager.get_embedder(backbone_key)
+    image_index = manager.get_image_index(backbone_key)
+    image_files = manager.get_image_files(backbone_key)
 
-    elapsed = time.time() - start
+    qvec = embedder.encode_text(query).astype("float32").reshape(1, -1)
+    faiss.normalize_L2(qvec)
+    sims, idxs = image_index.search(qvec, min(k, len(image_files)))
 
-    results_list = []
-    for rank, (idx, score) in enumerate(zip(indices[0], scores[0])):
-        results_list.append({
-            "filename": filenames[idx],
-            "similarity": round(float(score), 6),
-            "rank": rank + 1,
-            "image_url": url_for('serve_flickr8k_image', filename=filenames[idx]),
-        })
-
+    results = [
+        {"rank": r + 1,
+         "filename":   image_files[int(i)],
+         "similarity": float(s),
+         "image_url": url_for("serve_flickr8k_image", filename=image_files[int(i)])}
+        for r, (i, s) in enumerate(zip(idxs[0], sims[0]))
+    ]
     return jsonify({
-        "results": results_list,
-        "elapsed": round(elapsed, 2),
-        "total_results": len(filenames),
-        "query": query,
-        "k": k,
+        "results":          results,
+        "total_results":    len(results),
+        "elapsed":          round(time.perf_counter() - t0, 3),
+        "backbone":         backbone_key,
+        "backbone_display": BACKBONES[backbone_key].display_name,
     })
 
 @app.route('/search_image_to_text', methods=['POST'])
+@login_required
 def search_image_to_text():
-    """Multimodal image-to-text search using CLIP on Flickr8k captions."""
-    if 'query_image' not in request.files:
+    t0 = time.perf_counter()
+    try:
+        backbone_key = _resolve_backbone(request)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+
+    file = request.files.get("query_image")
+    if file is None or file.filename == "":
         return jsonify({"error": "No image uploaded"}), 400
 
-    file = request.files['query_image']
-    if file.filename == '':
-        return jsonify({"error": "No image selected"}), 400
-
-    filename = secure_filename(file.filename)
-    filepath = os.path.join(UPLOAD_FOLDER, filename)
+    k = int(request.form.get("k") or 20)
+    filepath = os.path.join(UPLOAD_FOLDER, secure_filename(file.filename))
     file.save(filepath)
 
-    k = int(request.form.get('k', 10))
+    embedder      = manager.get_embedder(backbone_key)
+    caption_index = manager.get_caption_index(backbone_key)
+    captions      = manager.get_captions(backbone_key)
 
-    start = time.time()
+    pil  = Image.open(filepath).convert("RGB")
+    qvec = embedder.encode_image(pil).astype("float32").reshape(1, -1)
+    faiss.normalize_L2(qvec)
+    sims, idxs = caption_index.search(qvec, min(k, len(captions)))
 
-    try:
-        get_faiss_text_index()
-        captions, img_files, _ = load_flickr8k_captions()
-    except FileNotFoundError as e:
-        return jsonify({"error": str(e)}), 500
+    caption_filenames = manager.get_caption_filenames(backbone_key)
 
-    # Encode query image
-    from clip_model import get_embedder
-    embedder = get_embedder()
-    img = cv2.imread(filepath)
-    if img is None:
-        return jsonify({"error": "Could not read image"}), 400
-
-    image_embedding = embedder.encode_image(img)
-    query_vec = np.array([image_embedding], dtype=np.float32)
-
-    # FAISS search in caption index
-    index = get_faiss_text_index()
-    scores, indices = index.search(query_vec, k)
-
-    elapsed = time.time() - start
-
-    results_list = []
-    for rank, (idx, score) in enumerate(zip(indices[0], scores[0])):
-        results_list.append({
-            "caption": captions[idx],
-            "source_image": img_files[idx],
-            "similarity": round(float(score), 6),
-            "rank": rank + 1,
-            "image_url": url_for('serve_flickr8k_image', filename=img_files[idx]),
-        })
-
+    results = [
+        {"rank": r + 1,
+        "caption":      captions[int(i)],
+        "similarity":   float(s),
+        "source_image": caption_filenames[int(i)],
+        "image_url":    url_for("serve_flickr8k_image", filename=caption_filenames[int(i)])}
+        for r, (i, s) in enumerate(zip(idxs[0], sims[0]))
+    ]
     return jsonify({
-        "results": results_list,
-        "elapsed": round(elapsed, 2),
-        "query_image_url": url_for('serve_upload', filename=filename),
-        "k": k,
+        "results":          results,
+        "elapsed":          round(time.perf_counter() - t0, 3),
+        "backbone":         backbone_key,
+        "backbone_display": BACKBONES[backbone_key].display_name,
     })
 
+
+@app.route("/backbones", methods=["GET"])
+@login_required
+def list_backbones():
+    return jsonify({
+        "backbones":    manager.list_backbones(),
+        "default":      DEFAULT_BACKBONE,
+        "max_resident": int(os.environ.get("MIR_MAX_BACKBONES", "1")),
+    })
+
+
+def _resolve_backbone(req) -> str:
+    key = None
+    if req.is_json:
+        key = (req.get_json(silent=True) or {}).get("backbone")
+    key = key or req.form.get("backbone") or req.args.get("backbone") or DEFAULT_BACKBONE
+    if not manager.is_known(key):
+        raise ValueError(f"Unknown backbone '{key}'")
+    return key
+
+
+try:
+    manager.preload(DEFAULT_BACKBONE)
+    app.logger.info("Default backbone '%s' preloaded.", DEFAULT_BACKBONE)
+except Exception as e:
+    app.logger.warning("Default backbone preload failed: %s", e)
+
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    if current_user.is_authenticated:
+        return redirect("/")
+    error = None
+    if request.method == "POST":
+        username = request.form.get("username", "").strip()
+        password = request.form.get("password", "")
+        expected_user = os.environ.get("MIR_USERNAME", "admin")
+        expected_hash = os.environ.get("MIR_PASSWORD_HASH", "")
+        if username == expected_user and check_password_hash(expected_hash, password):
+            login_user(_User(username), remember=True)
+            return redirect(request.args.get("next") or "/")
+        error = "Invalid credentials — access denied."
+    return render_template("login.html", error=error)
+
+
+@app.route("/logout")
+@login_required
+def logout():
+    logout_user()
+    return redirect("/login")
+
 if __name__ == '__main__':
-    app.run(debug=True, port=5000)
+    app.run(port=5000, debug=os.environ.get('FLASK_DEBUG', 'false').lower() == 'true')

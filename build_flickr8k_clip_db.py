@@ -13,17 +13,18 @@ import os
 import sys
 import time
 import numpy as np
+import argparse
 
 # ── Paths ───────────────────────────────────────────────────────────────────
 PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
-DATASET_PATH = os.path.join(PROJECT_ROOT, "Flickr8k_Dataset", "Flicker8k_Dataset")
+DATASET_PATH = os.path.join(PROJECT_ROOT, "Flickr8k_Dataset") # The dataset is in the Flickr8k_Dataset folder in the project root
 DESCRIPTORS_PATH = os.path.join(PROJECT_ROOT, "descriptors")
 CLIP_FLICKR8K_DIR = os.path.join(DESCRIPTORS_PATH, "CLIP_Flickr8k")
 
 
-def main():
+def main(args): # args is the backbone name
     from tqdm import tqdm
-    from clip_model import CLIPEmbedder
+    from embedders import get_embedder
 
     print("=" * 60)
     print("  CLIP Flickr8k Embeddings Database Builder")
@@ -51,7 +52,7 @@ def main():
     os.makedirs(CLIP_FLICKR8K_DIR, exist_ok=True)
 
     # ── Load CLIP model ──────────────────────────────────────────────────
-    embedder = CLIPEmbedder()
+    embedder = get_embedder(args.backbone)
 
     # ── Extract embeddings in batches ────────────────────────────────────
     batch_size = 32
@@ -80,13 +81,13 @@ def main():
     try:
         import h5py
 
-        h5_path = os.path.join(CLIP_FLICKR8K_DIR, "clip_flickr8k.h5")
+        h5_path = os.path.join(CLIP_FLICKR8K_DIR, f"embeddings_{embedder.backbone_id}.h5")
         embeddings_matrix = np.array(all_embeddings, dtype=np.float32)
 
         with h5py.File(h5_path, "w") as f:
             f.create_dataset("embeddings", data=embeddings_matrix)
-            dt = h5py.special_dtype(vlen=str)
-            filenames_ds = f.create_dataset("filenames", (len(all_filenames),), dtype=dt)
+            str_dtype = h5py.string_dtype()
+            filenames_ds = f.create_dataset("filenames", (len(all_filenames),), dtype=str_dtype)
             for i, name in enumerate(all_filenames):
                 filenames_ds[i] = name
 
@@ -102,4 +103,9 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser(description="Build Flickr8k CLIP image embeddings.")
+    parser.add_argument("--backbone", default="clip",
+                    choices=["clip", "openclip_b32", "openclip_l14", "blip"],
+                    help="Embedder backbone to use.")
+    args = parser.parse_args()
+    main(args)
