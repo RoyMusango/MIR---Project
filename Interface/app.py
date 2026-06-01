@@ -30,6 +30,7 @@ import functions as f
 
 app = Flask(__name__)
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max upload
+app.config['SECRET_KEY'] = os.environ.get('MIR_SECRET_KEY', 'fallback-key')
 
 csrf = CSRFProtect(app)
 limiter = Limiter(get_remote_address, app=app, default_limits=[], storage_uri="memory://")
