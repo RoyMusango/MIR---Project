@@ -22,11 +22,17 @@ from backbone_manager import manager, BACKBONES, DEFAULT_BACKBONE
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
 from werkzeug.security import check_password_hash
 from flask import redirect
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
+from flask_wtf.csrf import CSRFProtect
 
 import functions as f
 
 app = Flask(__name__)
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max upload
+
+csrf = CSRFProtect(app)
+limiter = Limiter(get_remote_address, app=app, default_limits=[], storage_uri="memory://")
 
 app.secret_key = os.environ.get("MIR_SECRET_KEY", os.urandom(24))
 
@@ -48,6 +54,10 @@ DATASET_PATH = os.path.join(PROJECT_ROOT, "dataset_voitures", "dataset")
 DESCRIPTORS_PATH = os.path.join(PROJECT_ROOT, "descriptors")
 UPLOAD_FOLDER = os.path.join(os.path.dirname(__file__), "uploads")
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+
+ALLOWED_EXTENSIONS = {'jpg', 'jpeg', 'png', 'bmp', 'webp'}
+def allowed_file(filename: str) -> bool:
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 # Flickr8k paths
 FLICKR8K_DATASET_PATH = os.path.join(PROJECT_ROOT, "Flickr8k_Dataset")
@@ -280,6 +290,7 @@ def serve_upload(filename):
 
 @app.route('/get_distances', methods=['POST'])
 @login_required
+@csrf.exempt
 def get_distances():
     """return the right distance list depending on descriptor group"""
     data = request.get_json()
@@ -293,6 +304,7 @@ def get_distances():
 
 @app.route('/search', methods=['POST'])
 @login_required
+@csrf.exempt
 def search():
     # get the uploaded file
     if 'query_image' not in request.files:
@@ -301,6 +313,8 @@ def search():
     file = request.files['query_image']
     if file.filename == '':
         return jsonify({"error": "No image selected"}), 400
+    if not allowed_file(file.filename):
+        return jsonify({"error": "File type not allowed. Use JPG, PNG, BMP or WebP."}), 400
 
     filename = secure_filename(file.filename)
     filepath = os.path.join(UPLOAD_FOLDER, filename)
@@ -328,6 +342,7 @@ def search():
 
 @app.route('/search_text', methods=['POST'])
 @login_required
+@csrf.exempt
 def search_text():
     t0 = time.perf_counter()
     try:
@@ -366,6 +381,7 @@ def search_text():
 
 @app.route('/search_image_to_text', methods=['POST'])
 @login_required
+@csrf.exempt
 def search_image_to_text():
     t0 = time.perf_counter()
     try:
@@ -376,6 +392,8 @@ def search_image_to_text():
     file = request.files.get("query_image")
     if file is None or file.filename == "":
         return jsonify({"error": "No image uploaded"}), 400
+    if not allowed_file(file.filename):
+        return jsonify({"error": "File type not allowed. Use JPG, PNG, BMP or WebP."}), 400
 
     k = int(request.form.get("k") or 20)
     filepath = os.path.join(UPLOAD_FOLDER, secure_filename(file.filename))
@@ -410,6 +428,7 @@ def search_image_to_text():
 
 @app.route("/backbones", methods=["GET"])
 @login_required
+@csrf.exempt
 def list_backbones():
     return jsonify({
         "backbones":    manager.list_backbones(),
@@ -435,6 +454,7 @@ except Exception as e:
     app.logger.warning("Default backbone preload failed: %s", e)
 
 @app.route("/login", methods=["GET", "POST"])
+@limiter.limit("10 per minute")
 def login():
     if current_user.is_authenticated:
         return redirect("/")
@@ -457,5 +477,10 @@ def logout():
     logout_user()
     return redirect("/login")
 
+@app.errorhandler(429)
+def ratelimit_handler(e):
+    return render_template("login.html", error="Too many login attempts — wait 1 minute."), 429
+
 if __name__ == '__main__':
-    app.run(port=5000, debug=os.environ.get('FLASK_DEBUG', 'false').lower() == 'true')
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)),
+            debug=os.environ.get('FLASK_DEBUG', 'false').lower() == 'true')
