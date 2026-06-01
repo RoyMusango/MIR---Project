@@ -76,6 +76,15 @@
 
                 <div class="divider"></div>
 
+                <!-- Manual class override -->
+                <div class="section">
+                    <span class="section-title">CLASS OVERRIDE</span>
+                    <input type="text" id="manualClass" class="select-input" placeholder="e.g. 0_0  (auto-detect if empty)" style="font-size:0.7rem;">
+                    <p class="metric-info" style="margin-top:4px;opacity:0.6;">Override auto-detected class for metrics</p>
+                </div>
+
+                <div class="divider"></div>
+
                 <!-- Descriptors -->
                 <div class="section">
                     <span class="section-title">DESCRIPTORS</span>
@@ -88,8 +97,8 @@
                     <label class="checkbox-item"><input type="checkbox" name="descriptor" value="HOG (Shape)" data-group="vector"> HOG (Shape)</label>
 
                     <span class="group-label">Deep Learning</span>
-                    <label class="checkbox-item"><input type="checkbox" name="descriptor" value="ResNet50 (CNN)" data-group="vector"> ResNet50 · CNN</label>
-                    <label class="checkbox-item"><input type="checkbox" name="descriptor" value="CLIP (ViT)" data-group="vector"> CLIP ViT-B/32</label>
+                    <label class="checkbox-item"><input type="checkbox" name="descriptor" value="ViT (Deep Learning)" data-group="dl"> ViT · Vision Transformer</label>
+                    <label class="checkbox-item"><input type="checkbox" name="descriptor" value="ResNet50 (Deep Learning)" data-group="dl"> ResNet50 · Deep Learning</label>
 
                     <span class="group-label">Keypoint-based</span>
                     <label class="checkbox-item"><input type="checkbox" name="descriptor" value="SIFT (Keypoints)" data-group="keypoint"> SIFT (Keypoints)</label>
@@ -112,10 +121,14 @@
                     </select>
                 </div>
 
-                <!-- K slider with Top-20/50/100 presets -->
+                <!-- K slider with Top-20/50/100 presets + manual input -->
                 <div class="section">
-                    <span class="section-title" id="kLabel">RESULTS: 50</span>
-                    <input type="range" id="kSlider" min="1" max="100" value="50" class="slider">
+                    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+                        <span class="section-title" style="margin-bottom:0;">RESULTS</span>
+                        <input type="number" id="kInput" min="1" max="9999" value="50"
+                               style="width:62px;background:var(--bg-card,#1a1a2e);border:1px solid var(--border,#2a2a4a);color:var(--cyan,#00D4FF);font-family:inherit;font-size:0.72rem;padding:3px 6px;border-radius:3px;text-align:center;outline:none;">
+                    </div>
+                    <input type="range" id="kSlider" min="1" max="500" value="50" class="slider">
                     <div class="k-presets">
                         <button type="button" class="k-preset" data-k="20">TOP_20</button>
                         <button type="button" class="k-preset active" data-k="50">TOP_50</button>
@@ -160,6 +173,12 @@
 
                     <span class="metrics-subtitle">Overall</span>
                     <p class="metric-value" id="mapScore">mAP: —</p>
+                </div>
+
+                <!-- P-R curve -->
+                <div class="metrics-panel" id="prCurvePanel" style="display:none; margin-top:12px;">
+                    <span class="metrics-title">// PRECISION-RECALL CURVE</span>
+                    <canvas id="prCurveChart" height="180" style="margin-top:8px;"></canvas>
                 </div>
             </div>
         </aside>
@@ -220,8 +239,12 @@
 
                 <!-- K slider -->
                 <div class="section">
-                    <span class="section-title" id="kLabelMulti">RESULTS: 20</span>
-                    <input type="range" id="kSliderMulti" min="1" max="50" value="20" class="slider">
+                    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+                        <span class="section-title" style="margin-bottom:0;">RESULTS</span>
+                        <input type="number" id="kInputMulti" min="1" max="9999" value="20"
+                               style="width:62px;background:var(--bg-card,#1a1a2e);border:1px solid var(--border,#2a2a4a);color:var(--cyan,#00D4FF);font-family:inherit;font-size:0.72rem;padding:3px 6px;border-radius:3px;text-align:center;outline:none;">
+                    </div>
+                    <input type="range" id="kSliderMulti" min="1" max="200" value="20" class="slider">
                 </div>
 
                 <div class="divider"></div>
@@ -271,6 +294,8 @@
          MOTION ONE — Framer Motion's animation engine, vanilla JS, via CDN
          (same author Matt Perry; no React needed)
          =================================================================== -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
     <script type="module">
         import { animate, stagger, inView } from "https://cdn.jsdelivr.net/npm/motion@10.18.0/+esm";
         window.__motion = { animate, stagger, inView };
@@ -361,6 +386,7 @@
             }
 
             document.getElementById('metricsPanel').style.display = 'none';
+            document.getElementById('prCurvePanel').style.display = 'none';
 
             // animate the now-visible sidebar
             if (window.__motion?.animateSidebarSwitch) {
@@ -466,25 +492,48 @@
             });
         }
 
-        // ---- K sliders & quick presets ----
+        // ---- K sliders, quick presets & manual number inputs ----
         const kSlider = document.getElementById('kSlider');
-        const kLabel  = document.getElementById('kLabel');
-        kSlider.addEventListener('input', function() {
-            kLabel.textContent = 'RESULTS: ' + this.value;
+        const kInput  = document.getElementById('kInput');
+
+        function syncKUnimodal(val) {
+            const n = Math.max(1, parseInt(val) || 1);
+            kInput.value  = n;
+            kSlider.value = Math.min(n, parseInt(kSlider.max));
             document.querySelectorAll('.k-preset').forEach(b => {
-                b.classList.toggle('active', String(b.dataset.k) === String(this.value));
+                b.classList.toggle('active', String(b.dataset.k) === String(n));
             });
-        });
-        document.querySelectorAll('.k-preset').forEach(btn => {
-            btn.addEventListener('click', () => {
-                kSlider.value = btn.dataset.k;
-                kLabel.textContent = 'RESULTS: ' + btn.dataset.k;
-                document.querySelectorAll('.k-preset').forEach(b => b.classList.toggle('active', b === btn));
-            });
+        }
+
+        kSlider.addEventListener('input', function() { syncKUnimodal(this.value); });
+
+        kInput.addEventListener('input', function() { syncKUnimodal(this.value); });
+        kInput.addEventListener('change', function() {
+            const n = Math.max(1, parseInt(this.value) || 1);
+            this.value = n;
+            syncKUnimodal(n);
         });
 
-        document.getElementById('kSliderMulti').addEventListener('input', function() {
-            document.getElementById('kLabelMulti').textContent = 'RESULTS: ' + this.value;
+        document.querySelectorAll('.k-preset').forEach(btn => {
+            btn.addEventListener('click', () => { syncKUnimodal(btn.dataset.k); });
+        });
+
+        const kSliderMulti = document.getElementById('kSliderMulti');
+        const kInputMulti  = document.getElementById('kInputMulti');
+
+        function syncKMulti(val) {
+            const n = Math.max(1, parseInt(val) || 1);
+            kInputMulti.value  = n;
+            kSliderMulti.value = Math.min(n, parseInt(kSliderMulti.max));
+        }
+
+        kSliderMulti.addEventListener('input', function() { syncKMulti(this.value); });
+
+        kInputMulti.addEventListener('input', function() { syncKMulti(this.value); });
+        kInputMulti.addEventListener('change', function() {
+            const n = Math.max(1, parseInt(this.value) || 1);
+            this.value = n;
+            syncKMulti(n);
         });
 
         // ─────────────────────────────────────────────────────────────
@@ -580,7 +629,9 @@
             formData.append('query_image', selectedFile);
             checked.forEach(cb => formData.append('descriptors', cb.value));
             formData.append('distance', document.getElementById('distanceSelect').value);
-            formData.append('k', document.getElementById('kSlider').value);
+            formData.append('k', document.getElementById('kInput').value);
+            const manualClass = document.getElementById('manualClass').value.trim();
+            if (manualClass) formData.append('manual_class', manualClass);
 
             const btn = document.getElementById('searchBtn');
             btn.disabled = true;
@@ -640,6 +691,10 @@
 
                 document.getElementById('mapScore').textContent = `> mAP = ${data.metrics.map}%`;
 
+                if (data.pr_curve && data.pr_curve.length > 0) {
+                    renderPrCurve(data.pr_curve);
+                }
+
                 displayResults(data.results, false);
 
                 if (window.__motion?.animateMetrics) window.__motion.animateMetrics();
@@ -667,20 +722,20 @@
                 return;
             }
 
-            const k = document.getElementById('kSliderMulti').value;
+            const k = document.getElementById('kInputMulti').value;
             const btn = document.getElementById('searchBtnMulti');
             btn.disabled = true;
             btn.textContent = 'PROCESSING…';
-            
+
             // --- PROGRESS BAR START ---
             const progressWrapper = document.getElementById('progressWrapperMulti');
             const progressFill = document.getElementById('progressFillMulti');
             progressWrapper.style.display = 'block';
             progressFill.style.width = '0%';
-            
+
             let currentProgress = 0;
             const progressInterval = setInterval(() => {
-                currentProgress += (95 - currentProgress) * 0.05; 
+                currentProgress += (95 - currentProgress) * 0.05;
                 progressFill.style.width = `${currentProgress}%`;
             }, 300);
             // --------------------------
@@ -739,7 +794,7 @@
                 return;
             }
 
-            const k = document.getElementById('kSliderMulti').value;
+            const k = document.getElementById('kInputMulti').value;
             const formData = new FormData();
             formData.append('query_image', selectedFileMulti);
             formData.append('k', k);
@@ -876,6 +931,62 @@
                 doTextSearch();
             }
         });
+
+        // ---- P-R curve chart ----
+        let __prChart = null;
+
+        function renderPrCurve(prData) {
+            const panel = document.getElementById('prCurvePanel');
+            panel.style.display = 'block';
+
+            const recalls    = prData.map(p => p.recall);
+            const precisions = prData.map(p => p.precision);
+
+            const ctx = document.getElementById('prCurveChart').getContext('2d');
+            if (__prChart) { __prChart.destroy(); __prChart = null; }
+
+            __prChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: recalls,
+                    datasets: [{
+                        label: 'P-R',
+                        data: precisions,
+                        borderColor: '#00D4FF',
+                        backgroundColor: 'rgba(0,212,255,0.08)',
+                        borderWidth: 2,
+                        pointRadius: 0,
+                        fill: true,
+                        tension: 0.3,
+                    }]
+                },
+                options: {
+                    animation: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                title: (items) => `Recall: ${items[0].label}%`,
+                                label:  (item)  => `Precision: ${item.raw}%`,
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            title: { display: true, text: 'Recall (%)', color: '#888', font: { size: 10 } },
+                            ticks: { color: '#888', maxTicksLimit: 5, font: { size: 9 } },
+                            grid:  { color: 'rgba(255,255,255,0.04)' },
+                        },
+                        y: {
+                            title: { display: true, text: 'Precision (%)', color: '#888', font: { size: 10 } },
+                            ticks: { color: '#888', maxTicksLimit: 5, font: { size: 9 } },
+                            grid:  { color: 'rgba(255,255,255,0.04)' },
+                            min: 0, max: 100,
+                        }
+                    }
+                }
+            });
+        }
 
         // ---- Multi-mode dispatcher ----
         let __multiMode = 'text2img';

@@ -226,7 +226,9 @@ descriptors/
 
 # Dataset (trop lourd pour Git)
 dataset_voitures/
+dataset_test/
 Flickr8k_Dataset/
+weights/
 
 # Flask uploads
 Interface/uploads/
@@ -234,6 +236,7 @@ Interface/uploads/
 # Environnement virtuel
 venv/
 .env
+setup_credentials.py
 
 # Results Folder
 results/
