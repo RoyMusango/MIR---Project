@@ -45,11 +45,16 @@ app.config['SECRET_KEY'] = os.environ.get('MIR_SECRET_KEY', 'fallback-key')
 csrf = CSRFProtect(app)
 limiter = Limiter(get_remote_address, app=app, default_limits=[], storage_uri="memory://")
 
-app.secret_key = os.environ.get("MIR_SECRET_KEY", os.urandom(24))
-
 login_manager = LoginManager(app)
 login_manager.login_view = "login"
 login_manager.login_message = ""
+
+# Return JSON for API routes instead of HTML redirect
+@login_manager.unauthorized_handler
+def unauthorized():
+    if request.path.startswith('/search') or request.path.startswith('/get_'):
+        return jsonify({"error": "Session expired. Please refresh the page and log in again."}), 401
+    return redirect(url_for('login'))
 
 
 class _User(UserMixin):
