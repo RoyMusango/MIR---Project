@@ -25,11 +25,21 @@ from flask import redirect
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from flask_wtf.csrf import CSRFProtect
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 import functions as f
 
 app = Flask(__name__)
+
+# Trust HuggingFace reverse proxy
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
+
+# Allow cross-site cookies (required for iframe embedding)
+app.config['SESSION_COOKIE_SAMESITE'] = 'None'
+app.config['SESSION_COOKIE_SECURE'] = True
+
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max upload
+# Secret Key
 app.config['SECRET_KEY'] = os.environ.get('MIR_SECRET_KEY', 'fallback-key')
 
 csrf = CSRFProtect(app)
