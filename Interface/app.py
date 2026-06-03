@@ -75,11 +75,12 @@ DESCRIPTOR_MAP = {
     "ORB (Keypoints)":          ("ORB",      f.generateORB,               4),
     "ViT (Deep Learning)":      ("ViT",      f.generateViT,               8),
     "ResNet50 (Deep Learning)": ("ResNet",   f.generateResNet,            9),
+    "CLIP (ViT)":               ("CLIP",     f.generateCLIP,             10),
 }
 
 VECTOR_DESCRIPTORS   = ["Color Histogram", "HSV Histogram", "GLCM (Texture)", "LBP (Texture)", "HOG (Shape)"]
 KEYPOINT_DESCRIPTORS = ["SIFT (Keypoints)", "ORB (Keypoints)"]
-DL_DESCRIPTORS       = ["ViT (Deep Learning)", "ResNet50 (Deep Learning)"]
+DL_DESCRIPTORS       = ["ViT (Deep Learning)", "ResNet50 (Deep Learning)", "CLIP (ViT)"]
 
 VECTOR_DISTANCES   = ["Euclidienne", "Chi carre", "Correlation", "Intersection", "Bhattacharyya"]
 KEYPOINT_DISTANCES = ["Brute force", "Flann"]
