@@ -318,9 +318,31 @@ def get_dataset_images():
         return jsonify({"error": "Could not read dataset."}), 500
 
 
-@app.route('/flickr8k/<filename>')
+@app.route('/flickr8k/<path:filename>')
+@login_required
 def serve_flickr8k_image(filename):
+    safe = os.path.abspath(os.path.join(FLICKR8K_DATASET_PATH, filename))
+    if not safe.startswith(os.path.abspath(FLICKR8K_DATASET_PATH) + os.sep):
+        return "Forbidden", 403
     return send_from_directory(FLICKR8K_DATASET_PATH, filename)
+
+
+@app.route('/api/flickr8k_images')
+@login_required
+def get_flickr8k_images():
+    page = max(1, request.args.get('page', 1, type=int))
+    per_page = 40
+    try:
+        files = sorted([f_ for f_ in os.listdir(FLICKR8K_DATASET_PATH)
+                        if allowed_file(f_) and os.path.isfile(os.path.join(FLICKR8K_DATASET_PATH, f_))])
+        total = len(files)
+        pages = max(1, math.ceil(total / per_page))
+        start = (page - 1) * per_page
+        return jsonify({"files": files[start:start+per_page], "page": page,
+                        "total_pages": pages, "total_files": total})
+    except Exception as e:
+        app.logger.error("flickr8k_images: %s", e)
+        return jsonify({"error": "Could not read Flickr8k."}), 500
 
 
 @app.route('/uploads/<filename>')
@@ -438,13 +460,21 @@ def search_image_to_text():
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
 
-    file = request.files.get("query_image")
-    if file is None or file.filename == "":
-        return jsonify({"error": "No image uploaded"}), 400
-
     k = int(request.form.get("k") or 20)
-    filepath = os.path.join(UPLOAD_FOLDER, secure_filename(file.filename))
-    file.save(filepath)
+    dataset_filename = request.form.get('dataset_filename')
+    file = request.files.get("query_image")
+    if file is not None and file.filename != "":
+        if not allowed_file(file.filename):
+            return jsonify({"error": "File type not allowed."}), 400
+        filepath = os.path.join(UPLOAD_FOLDER, secure_filename(file.filename))
+        file.save(filepath)
+    elif dataset_filename:
+        clean = secure_filename(dataset_filename)
+        filepath = os.path.abspath(os.path.join(FLICKR8K_DATASET_PATH, clean))
+        if not filepath.startswith(os.path.abspath(FLICKR8K_DATASET_PATH) + os.sep) or not os.path.isfile(filepath):
+            return jsonify({"error": "Dataset image not found."}), 404
+    else:
+        return jsonify({"error": "No image uploaded"}), 400
 
     embedder      = manager.get_embedder(backbone_key)
     caption_index = manager.get_caption_index(backbone_key)
