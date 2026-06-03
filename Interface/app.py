@@ -75,12 +75,12 @@ DESCRIPTOR_MAP = {
     "ORB (Keypoints)":          ("ORB",      f.generateORB,               4),
     "ViT (Deep Learning)":      ("ViT",      f.generateViT,               8),
     "ResNet50 (Deep Learning)": ("ResNet",   f.generateResNet,            9),
-    "CLIP (ViT)":               ("CLIP",     f.generateCLIP,             10),
+    "CLIP (OpenAI)":            ("CLIP",     f.generateCLIP,             10),
 }
 
 VECTOR_DESCRIPTORS   = ["Color Histogram", "HSV Histogram", "GLCM (Texture)", "LBP (Texture)", "HOG (Shape)"]
 KEYPOINT_DESCRIPTORS = ["SIFT (Keypoints)", "ORB (Keypoints)"]
-DL_DESCRIPTORS       = ["ViT (Deep Learning)", "ResNet50 (Deep Learning)", "CLIP (ViT)"]
+DL_DESCRIPTORS       = ["ViT (Deep Learning)", "ResNet50 (Deep Learning)", "CLIP (OpenAI)"]
 
 VECTOR_DISTANCES   = ["Euclidienne", "Chi carre", "Correlation", "Intersection", "Bhattacharyya"]
 KEYPOINT_DISTANCES = ["Brute force", "Flann"]
@@ -319,13 +319,13 @@ def get_dataset_images():
         return jsonify({"error": "Could not read dataset."}), 500
 
 
-@app.route('/flickr8k/<path:filename>')
+
 @login_required
+@app.route('/flickr8k_image/<path:filename>')
 def serve_flickr8k_image(filename):
-    safe = os.path.abspath(os.path.join(FLICKR8K_DATASET_PATH, filename))
-    if not safe.startswith(os.path.abspath(FLICKR8K_DATASET_PATH) + os.sep):
-        return "Forbidden", 403
-    return send_from_directory(FLICKR8K_DATASET_PATH, filename)
+    import os
+    target_dir = os.path.join(PROJECT_ROOT, "Flickr8k_Dataset", "Flicker8k_Dataset")
+    return send_from_directory(target_dir, filename)
 
 
 @app.route('/api/flickr8k_images')

@@ -14,6 +14,7 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     <link rel="icon" href="{{ url_for('static', filename='img/logo.svg') }}" type="image/svg+xml">
 </head>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <body>
 
     <!-- Atmospheric background orbs -->
@@ -115,7 +116,7 @@
                     <span class="group-label">Deep Learning</span>
                     <label class="checkbox-item"><input type="checkbox" name="descriptor" value="ViT (Deep Learning)" data-group="dl"> ViT · Vision Transformer</label>
                     <label class="checkbox-item"><input type="checkbox" name="descriptor" value="ResNet50 (Deep Learning)" data-group="dl"> ResNet50 · Deep Learning</label>
-                    <label class="checkbox-item"><input type="checkbox" name="descriptor" value="CLIP (ViT)" data-group="dl"> CLIP · ViT-B/32</label>
+                    <label class="checkbox-item"><input type="checkbox" name="descriptor" value="CLIP (OpenAI)" data-group="dl"> CLIP (OpenAI) · Zero-Shot</label>
 
                     <span class="group-label">Keypoint-based</span>
                     <label class="checkbox-item"><input type="checkbox" name="descriptor" value="SIFT (Keypoints)" data-group="keypoint"> SIFT (Keypoints)</label>
