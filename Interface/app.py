@@ -10,6 +10,7 @@ sys.path.insert(0, PROJECT_ROOT)
 os.environ.setdefault("MIR_H5_DIR", os.path.join(PROJECT_ROOT, "descriptors", "CLIP_Flickr8k"))
 
 import torch
+import math
 import time
 import numpy as np
 import cv2
@@ -22,39 +23,27 @@ from backbone_manager import manager, BACKBONES, DEFAULT_BACKBONE
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
 from werkzeug.security import check_password_hash
 from flask import redirect
-from flask_limiter import Limiter
-from flask_limiter.util import get_remote_address
-from flask_wtf.csrf import CSRFProtect
-from werkzeug.middleware.proxy_fix import ProxyFix
 
 import functions as f
 
+from werkzeug.middleware.proxy_fix import ProxyFix
+from flask_wtf.csrf import CSRFProtect
+
 app = Flask(__name__)
-
-# Trust HuggingFace reverse proxy
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
-
-# Allow cross-site cookies (required for iframe embedding)
+app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024
+app.config['SECRET_KEY'] = os.environ.get("MIR_SECRET_KEY", "mir-static-fallback-2026")
 app.config['SESSION_COOKIE_SAMESITE'] = 'None'
 app.config['SESSION_COOKIE_SECURE'] = True
-
-app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max upload
-# Secret Key
-app.config['SECRET_KEY'] = os.environ.get('MIR_SECRET_KEY', 'fallback-key')
-
 csrf = CSRFProtect(app)
-limiter = Limiter(get_remote_address, app=app, default_limits=[], storage_uri="memory://")
+
+ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'bmp', 'webp'}
+def allowed_file(fn):
+    return '.' in fn and fn.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 login_manager = LoginManager(app)
 login_manager.login_view = "login"
 login_manager.login_message = ""
-
-# Return JSON for API routes instead of HTML redirect
-@login_manager.unauthorized_handler
-def unauthorized():
-    if request.path.startswith('/search') or request.path.startswith('/get_'):
-        return jsonify({"error": "Session expired. Please refresh the page and log in again."}), 401
-    return redirect(url_for('login'))
 
 
 class _User(UserMixin):
@@ -70,10 +59,6 @@ DATASET_PATH = os.path.join(PROJECT_ROOT, "dataset_voitures", "dataset")
 DESCRIPTORS_PATH = os.path.join(PROJECT_ROOT, "descriptors")
 UPLOAD_FOLDER = os.path.join(os.path.dirname(__file__), "uploads")
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
-
-ALLOWED_EXTENSIONS = {'jpg', 'jpeg', 'png', 'bmp', 'webp'}
-def allowed_file(filename: str) -> bool:
-    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 # Flickr8k — images live inside the Flicker8k_Dataset subdirectory (original Project 1 layout)
 FLICKR8K_DATASET_PATH = os.path.join(PROJECT_ROOT, "Flickr8k_Dataset", "Flicker8k_Dataset")
@@ -301,14 +286,63 @@ def index():
     return render_template('index.html')
 
 
-@app.route('/dataset/<filename>')
+@app.route('/dataset/<path:filename>')
+@login_required
 def serve_dataset_image(filename):
+    safe = os.path.abspath(os.path.join(DATASET_PATH, filename))
+    if not safe.startswith(os.path.abspath(DATASET_PATH) + os.sep):
+        return "Forbidden", 403
     return send_from_directory(DATASET_PATH, filename)
 
 
-@app.route('/flickr8k/<filename>')
+@app.route('/api/dataset_images')
+@login_required
+def get_dataset_images():
+    page = max(1, request.args.get('page', 1, type=int))
+    per_page = 40
+    try:
+        files = []
+        for root, _, fs in os.walk(DATASET_PATH):
+            for f_ in fs:
+                if allowed_file(f_):
+                    rel = os.path.relpath(os.path.join(root, f_), DATASET_PATH)
+                    files.append(rel.replace(os.sep, '/'))
+        files.sort()
+        total = len(files)
+        pages = max(1, math.ceil(total / per_page))
+        start = (page - 1) * per_page
+        return jsonify({"files": files[start:start+per_page], "page": page,
+                        "total_pages": pages, "total_files": total})
+    except Exception as e:
+        app.logger.error("dataset_images: %s", e)
+        return jsonify({"error": "Could not read dataset."}), 500
+
+
+@app.route('/flickr8k/<path:filename>')
+@login_required
 def serve_flickr8k_image(filename):
+    safe = os.path.abspath(os.path.join(FLICKR8K_DATASET_PATH, filename))
+    if not safe.startswith(os.path.abspath(FLICKR8K_DATASET_PATH) + os.sep):
+        return "Forbidden", 403
     return send_from_directory(FLICKR8K_DATASET_PATH, filename)
+
+
+@app.route('/api/flickr8k_images')
+@login_required
+def get_flickr8k_images():
+    page = max(1, request.args.get('page', 1, type=int))
+    per_page = 40
+    try:
+        files = sorted([f_ for f_ in os.listdir(FLICKR8K_DATASET_PATH)
+                        if allowed_file(f_) and os.path.isfile(os.path.join(FLICKR8K_DATASET_PATH, f_))])
+        total = len(files)
+        pages = max(1, math.ceil(total / per_page))
+        start = (page - 1) * per_page
+        return jsonify({"files": files[start:start+per_page], "page": page,
+                        "total_pages": pages, "total_files": total})
+    except Exception as e:
+        app.logger.error("flickr8k_images: %s", e)
+        return jsonify({"error": "Could not read Flickr8k."}), 500
 
 
 @app.route('/uploads/<filename>')
@@ -337,18 +371,25 @@ def get_distances():
 @csrf.exempt
 def search():
     # get the uploaded file
-    if 'query_image' not in request.files:
-        return jsonify({"error": "No image uploaded"}), 400
-
-    file = request.files['query_image']
-    if file.filename == '':
+    dataset_filename = request.form.get('dataset_filename')
+    if 'query_image' in request.files and request.files['query_image'].filename != '':
+        file = request.files['query_image']
+        if not allowed_file(file.filename):
+            return jsonify({"error": "File type not allowed."}), 400
+        filename = secure_filename(file.filename)
+        filepath = os.path.join(UPLOAD_FOLDER, filename)
+        file.save(filepath)
+        query_url = url_for('serve_upload', filename=filename)
+    elif dataset_filename:
+        clean = dataset_filename.replace('\\', '/').lstrip('/')
+        if '..' in clean.split('/'):
+            return jsonify({"error": "Invalid file path."}), 400
+        filepath = os.path.abspath(os.path.join(DATASET_PATH, clean))
+        if not filepath.startswith(os.path.abspath(DATASET_PATH) + os.sep) or not os.path.isfile(filepath):
+            return jsonify({"error": "Dataset image not found."}), 404
+        query_url = url_for('serve_dataset_image', filename=clean)
+    else:
         return jsonify({"error": "No image selected"}), 400
-    if not allowed_file(file.filename):
-        return jsonify({"error": "File type not allowed. Use JPG, PNG, BMP or WebP."}), 400
-
-    filename = secure_filename(file.filename)
-    filepath = os.path.join(UPLOAD_FOLDER, filename)
-    file.save(filepath)
 
     # get search params
     descriptors = request.form.getlist('descriptors')
@@ -419,15 +460,21 @@ def search_image_to_text():
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
 
-    file = request.files.get("query_image")
-    if file is None or file.filename == "":
-        return jsonify({"error": "No image uploaded"}), 400
-    if not allowed_file(file.filename):
-        return jsonify({"error": "File type not allowed. Use JPG, PNG, BMP or WebP."}), 400
-
     k = int(request.form.get("k") or 20)
-    filepath = os.path.join(UPLOAD_FOLDER, secure_filename(file.filename))
-    file.save(filepath)
+    dataset_filename = request.form.get('dataset_filename')
+    file = request.files.get("query_image")
+    if file is not None and file.filename != "":
+        if not allowed_file(file.filename):
+            return jsonify({"error": "File type not allowed."}), 400
+        filepath = os.path.join(UPLOAD_FOLDER, secure_filename(file.filename))
+        file.save(filepath)
+    elif dataset_filename:
+        clean = secure_filename(dataset_filename)
+        filepath = os.path.abspath(os.path.join(FLICKR8K_DATASET_PATH, clean))
+        if not filepath.startswith(os.path.abspath(FLICKR8K_DATASET_PATH) + os.sep) or not os.path.isfile(filepath):
+            return jsonify({"error": "Dataset image not found."}), 404
+    else:
+        return jsonify({"error": "No image uploaded"}), 400
 
     embedder      = manager.get_embedder(backbone_key)
     caption_index = manager.get_caption_index(backbone_key)
@@ -484,7 +531,6 @@ except Exception as e:
     app.logger.warning("Default backbone preload failed: %s", e)
 
 @app.route("/login", methods=["GET", "POST"])
-@limiter.limit("10 per minute")
 def login():
     if current_user.is_authenticated:
         return redirect("/")
@@ -507,10 +553,5 @@ def logout():
     logout_user()
     return redirect("/login")
 
-@app.errorhandler(429)
-def ratelimit_handler(e):
-    return render_template("login.html", error="Too many login attempts — wait 1 minute."), 429
-
 if __name__ == '__main__':
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)),
-            debug=os.environ.get('FLASK_DEBUG', 'false').lower() == 'true')
+    app.run(port=5000, debug=os.environ.get('FLASK_DEBUG', 'false').lower() == 'true')
