@@ -237,6 +237,76 @@ def generateViT(image):
     print(f"ViT terminé en {time.time()-start_time:.3f}s")
     return feature
 
+# singleton ViT
+_vit_model = None
+_vit_processor = None
+
+def _load_vit():
+    global _vit_model, _vit_processor
+    if _vit_model is None:
+        import torch
+        from transformers import ViTForImageClassification, ViTImageProcessor, ViTModel
+        import json
+
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        _vit_processor = ViTImageProcessor.from_pretrained("google/vit-base-patch16-224")
+
+        weights_dir = os.environ.get(
+            "MIR_WEIGHTS_PATH",
+            os.path.join(os.path.dirname(os.path.abspath(__file__)), "weights")
+        )
+        finetuned_path = os.path.join(weights_dir, "vit_finetuned.pth")
+        classes_path = os.path.join(weights_dir, "vit_classes.json")
+
+        if os.path.exists(finetuned_path) and os.path.exists(classes_path):
+            print(f"[ViT] Loading fine-tuned weights: {finetuned_path}")
+            with open(classes_path, 'r') as f:
+                class_map = json.load(f)
+                num_classes = len(class_map)
+            
+            model_full = ViTForImageClassification.from_pretrained(
+                "google/vit-base-patch16-224", 
+                num_labels=num_classes,
+                ignore_mismatched_sizes=True
+            )
+            state_dict = torch.load(finetuned_path, map_location=device, weights_only=True)
+            model_full.load_state_dict(state_dict, strict=False)
+            
+            _vit_model = model_full.vit.to(device)
+            print(f"[ViT] Fine-tuned model loaded on {device}.")
+        else:
+            print(f"[ViT] No fine-tuned weights found, using pretrained on {device}.")
+            _vit_model = ViTModel.from_pretrained("google/vit-base-patch16-224").to(device)
+
+        _vit_model.eval()
+    return _vit_model, _vit_processor
+
+def generateViT(image):
+    """Extraction vecteur ViT 768-dim normalisé L2. Entrée: image BGR (numpy)."""
+    start_time = time.time()
+    import torch
+    from PIL import Image as PILImage
+
+    model, processor = _load_vit()
+    device = next(model.parameters()).device
+
+    rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+    pil_img = PILImage.fromarray(rgb)
+
+    inputs = processor(images=pil_img, return_tensors="pt")
+    pixel_values = inputs["pixel_values"].to(device)
+
+    with torch.no_grad():
+        outputs = model(pixel_values=pixel_values)
+        patch_embeddings = outputs.last_hidden_state[:, 1:, :]
+        mean_embedding = patch_embeddings.mean(dim=1)
+
+    mean_embedding = mean_embedding / mean_embedding.norm(dim=-1, keepdim=True)
+    feature = mean_embedding.cpu().numpy().flatten().astype(np.float32)
+
+    print(f"ViT terminé en {time.time()-start_time:.3f}s")
+    return feature
+
 # singleton ResNet50
 _resnet_model = None
 
@@ -246,6 +316,8 @@ def _load_resnet():
         import torch
         import torch.nn as nn
         from torchvision import models
+        import json
+
         device = "cuda" if torch.cuda.is_available() else "cpu"
         resnet = models.resnet50(weights=models.ResNet50_Weights.DEFAULT)
 
@@ -254,13 +326,21 @@ def _load_resnet():
             os.path.join(os.path.dirname(os.path.abspath(__file__)), "weights")
         )
         finetuned_path = os.path.join(weights_dir, "resnet_finetuned.pth")
-        if os.path.exists(finetuned_path):
-            print(f"[ResNet50] Chargement poids fine-tunés: {finetuned_path}")
+        classes_path = os.path.join(weights_dir, "resnet_classes.json")
+
+        if os.path.exists(finetuned_path) and os.path.exists(classes_path):
+            print(f"[ResNet50] Loading fine-tuned weights: {finetuned_path}")
+            with open(classes_path, 'r') as f:
+                class_map = json.load(f)
+                num_classes = len(class_map)
+            
+            resnet.fc = nn.Linear(resnet.fc.in_features, num_classes)
+            
             state_dict = torch.load(finetuned_path, map_location=device, weights_only=True)
             resnet.load_state_dict(state_dict, strict=False)
-            print(f"[ResNet50] Modèle chargé sur {device}.")
+            print(f"[ResNet50] Fine-tuned model loaded on {device}.")
         else:
-            print(f"[ResNet50] Pas de poids fine-tunés, utilisation du pretrained sur {device}.")
+            print(f"[ResNet50] No fine-tuned weights found, using pretrained on {device}.")
 
         _resnet_model = nn.Sequential(*list(resnet.children())[:-1]).to(device)
         _resnet_model.eval()
