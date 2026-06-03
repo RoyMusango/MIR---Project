@@ -1,0 +1,75 @@
+# ─────────────────────────────────────────────────────────────────
+#  Group 07 — I-ILIA-014 MIR Project  •  Dockerfile (HF Spaces)
+#
+#  Differences from local Dockerfile:
+#    • Port 7860 (HF default — saves a README config line)
+#    • UID 1000 user "user" (HF Spaces convention)
+#    • COPY --chown=user so the non-root user can read everything
+#    • No volume mounts — descriptor data is committed via Git LFS
+# ─────────────────────────────────────────────────────────────────
+
+FROM python:3.11-slim
+
+# System deps for opencv-python-headless + torch
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        libgl1 \
+        libglib2.0-0 \
+        libgomp1 \
+    && rm -rf /var/lib/apt/lists/*
+
+# HF Spaces convention: UID 1000 user named "user"
+RUN useradd -m -u 1000 user
+
+WORKDIR /home/user/app
+
+# Install Python deps as root (faster, layer-cached)
+COPY --chown=user requirements.txt .
+RUN pip install --no-cache-dir --upgrade pip \
+ && pip install --no-cache-dir \
+        --extra-index-url https://download.pytorch.org/whl/cpu \
+        -r requirements.txt
+
+# Application code
+COPY --chown=user functions.py        .
+COPY --chown=user clip_model.py       .
+COPY --chown=user backbone_manager.py .
+COPY --chown=user embedders/ embedders/
+COPY --chown=user evaluate.py         .
+COPY --chown=user Interface/app.py    Interface/app.py
+COPY --chown=user Interface/templates Interface/templates
+COPY --chown=user Interface/static    Interface/static
+
+# Demo data — small subset committed via Git LFS in the Space repo
+# (these directories must exist in the Space's git repo at push time)
+COPY --chown=user descriptors  descriptors
+COPY --chown=user dataset_voitures dataset_voitures
+COPY --chown=user Flickr8k_Dataset Flickr8k_Dataset
+
+# Pre-cache CLIP weights at build time (eliminates 600 MB cold start)
+RUN python - <<'EOF'
+from transformers import CLIPModel, CLIPProcessor
+CLIPModel.from_pretrained("openai/clip-vit-base-patch32")
+CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
+EOF
+
+# Switch to non-root user
+USER user
+
+ENV HOME=/home/user \
+    PATH=/home/user/.local/bin:$PATH \
+    PYTHONUNBUFFERED=1 \
+    KMP_DUPLICATE_LIB_OK=TRUE \
+    TRANSFORMERS_CACHE=/home/user/.cache/huggingface \
+    HF_HOME=/home/user/.cache/huggingface
+
+# Runtime upload folder
+RUN mkdir -p /home/user/app/Interface/uploads
+
+# HF Spaces default port
+EXPOSE 7860
+
+CMD ["gunicorn", \
+     "--workers", "2", \
+     "--timeout", "120", \
+     "--bind", "0.0.0.0:7860", \
+     "Interface.app:app"]

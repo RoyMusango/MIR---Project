@@ -1,0 +1,28 @@
+.git
+.gitignore
+.venv
+venv
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache
+.mypy_cache
+
+# Heavy data — mount at runtime with -v
+dataset_voitures/
+Flickr8k_Dataset/
+Flickr8k_text/
+descriptors/
+
+# Evaluation outputs
+results/
+
+# Dev notebooks
+*.ipynb
+.ipynb_checkpoints/
+
+# Editor artefacts
+.vscode/
+.idea/
+*.swp
