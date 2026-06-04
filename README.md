@@ -43,9 +43,10 @@ The unimodal engine uses classical computer vision descriptors alongside deep le
 
 ## Features
 
-- 🖼️ **Image-to-Image Search** — Upload a car image and retrieve the most similar ones using up to 9 descriptors
+- 🖼️ **Image-to-Image Search** — Upload a car image or browse the indexed Cars dataset, then retrieve the most similar ones using up to 9 descriptors
 - 📝 **Text-to-Image Search** — Type a natural language query and find matching Flickr8k images via CLIP + FAISS
-- 🔄 **Image-to-Text Search** — Submit an image and retrieve the most semantically relevant captions from Flickr8k
+- 🔄 **Image-to-Text Search** — Submit an image (upload or browse Flickr8k dataset) and retrieve the most semantically relevant captions
+- 📂 **Interactive Dataset Browser** — Browse and select images directly from the Cars dataset or Flickr8k collection without uploading
 - 🧠 **Deep Learning Descriptors** — ResNet50 (CNN) and CLIP ViT-B/32 alongside classical descriptors
 - 📊 **Full Evaluation Metrics** — Precision, Recall, AP, mAP, R-Precision at Top-50 and Top-100
 - ⚡ **Multi-Descriptor Fusion** — Combine multiple descriptors with normalized score averaging
@@ -210,7 +211,7 @@ Open your browser at **http://127.0.0.1:5000**
 ### Unimodal Image Search
 
 1. Click the **"Unimodal Image Search"** tab
-2. Upload a query car image
+2. Either **upload** a query car image or click **"📁 Browse Dataset"** to select from the indexed Cars collection
 3. Select one or more descriptors
 4. Choose a distance metric
 5. Adjust the number of results (K)
@@ -255,6 +256,7 @@ Outputs two CSV files:
 | SIFT | Keypoint | variable | Scale-Invariant Feature Transform |
 | ORB | Keypoint | variable | Oriented FAST and Rotated BRIEF |
 | **ResNet50** | **CNN (DL)** | **2048** | **Penultimate layer features, L2-normalized** |
+| **ViT (Deep Learning)** | **ViT (DL)** | **768** | **Google ViT-Base-16 image encoder, L2-normalized** |
 | **CLIP ViT-B/32** | **ViT (DL)** | **512** | **OpenAI CLIP image encoder, L2-normalized** |
 
 ### Distance Metrics

@@ -61,7 +61,28 @@ UPLOAD_FOLDER = os.path.join(os.path.dirname(__file__), "uploads")
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 # Flickr8k — images live inside the Flicker8k_Dataset subdirectory (original Project 1 layout)
-FLICKR8K_DATASET_PATH = os.path.join(PROJECT_ROOT, "Flickr8k_Dataset", "Flicker8k_Dataset")
+def _detect_flickr_dir():
+    env = os.environ.get("MIR_FLICKR_DIR")
+    candidates = ([env] if env else []) + [
+        os.path.join(PROJECT_ROOT, "Flickr8k_Dataset", "Flicker8k_Dataset"),
+        os.path.join(PROJECT_ROOT, "Flickr8k_Dataset", "Flickr8k_Dataset"),
+        os.path.join(PROJECT_ROOT, "Flickr8k_Dataset", "images"),
+        os.path.join(PROJECT_ROOT, "Flickr8k_Dataset"),
+    ]
+    for c in candidates:
+        try:
+            if c and os.path.isdir(c) and any(
+                fn.lower().endswith((".jpg", ".jpeg", ".png")) for fn in os.listdir(c)
+            ):
+                print(f"[Flickr8k] Images servies depuis : {c}")
+                return c
+        except Exception:
+            pass
+    fb = os.path.join(PROJECT_ROOT, "Flickr8k_Dataset", "Flicker8k_Dataset")
+    print(f"[Flickr8k] ATTENTION : aucune image trouvee, fallback {fb}")
+    return fb
+
+FLICKR8K_DATASET_PATH = _detect_flickr_dir()
 
 
 
@@ -96,9 +117,7 @@ def get_image_class(filename, manual_class=None):
     if manual_class:
         return manual_class.strip()
     parts = os.path.basename(filename).split("_")
-    if len(parts) >= 2:
-        return f"{parts[0]}_{parts[1]}"
-    return parts[0]
+    return parts[0]   # classe = 1er chiffre = marque (def. de l'enonce)
 
 
 def run_search(query_path, descriptor_keys, distance_name, k, manual_class=None):
@@ -320,12 +339,10 @@ def get_dataset_images():
 
 
 
-@login_required
 @app.route('/flickr8k_image/<path:filename>')
+@login_required
 def serve_flickr8k_image(filename):
-    import os
-    target_dir = os.path.join(PROJECT_ROOT, "Flickr8k_Dataset", "Flicker8k_Dataset")
-    return send_from_directory(target_dir, filename)
+    return send_from_directory(FLICKR8K_DATASET_PATH, filename)
 
 
 @app.route('/api/flickr8k_images')

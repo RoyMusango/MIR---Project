@@ -173,11 +173,21 @@ def generateHOG(image):
     return vect_features
 
 def generateCLIP(image):
+    """Extraction CLIP avec conversion BGR -> RGB obligatoire."""
     start_time = time.time()
-    from clip_model import get_embedder
-    embedder = get_embedder()
-    feature = embedder.encode_image(image)
-    print(f"CLIP terminé en {time.time()-start_time}s")
+    
+    # Remplace l'ancienne ligne par celle-ci :
+    from embedders.clip_hf import CLIPEmbedder 
+    
+    embedder = CLIPEmbedder()
+    
+    # Conversion OpenCV BGR -> RGB pour CLIP (très important)
+    rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+    from PIL import Image as PILImage
+    pil_img = PILImage.fromarray(rgb)
+    
+    feature = embedder.encode_image(pil_img)
+    print(f"CLIP terminé en {time.time()-start_time:.3f}s")
     return feature
 
 # singleton ViT
@@ -280,32 +290,6 @@ def _load_vit():
 
         _vit_model.eval()
     return _vit_model, _vit_processor
-
-def generateViT(image):
-    """Extraction vecteur ViT 768-dim normalisé L2. Entrée: image BGR (numpy)."""
-    start_time = time.time()
-    import torch
-    from PIL import Image as PILImage
-
-    model, processor = _load_vit()
-    device = next(model.parameters()).device
-
-    rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-    pil_img = PILImage.fromarray(rgb)
-
-    inputs = processor(images=pil_img, return_tensors="pt")
-    pixel_values = inputs["pixel_values"].to(device)
-
-    with torch.no_grad():
-        outputs = model(pixel_values=pixel_values)
-        patch_embeddings = outputs.last_hidden_state[:, 1:, :]
-        mean_embedding = patch_embeddings.mean(dim=1)
-
-    mean_embedding = mean_embedding / mean_embedding.norm(dim=-1, keepdim=True)
-    feature = mean_embedding.cpu().numpy().flatten().astype(np.float32)
-
-    print(f"ViT terminé en {time.time()-start_time:.3f}s")
-    return feature
 
 # singleton ResNet50
 _resnet_model = None
