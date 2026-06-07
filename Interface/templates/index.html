@@ -86,6 +86,8 @@
                         <div style="display:flex;justify-content:space-between;align-items:center;margin-top:18px;">
                         <button class="browse-btn" id="dsPrev" style="width:auto;padding:8px 16px;" onclick="loadDatasetPage(-1)">◀ PREV</button>
                         <span id="dsPage" style="color:var(--text-mute);font-size:12px;">Page 1</span>
+                        <input id="dsJump" type="number" min="1" placeholder="#" style="width:55px;padding:6px;margin:0 4px;background:var(--void-2);border:1px solid var(--cyan);color:var(--text);border-radius:4px;" onkeydown="if(event.key==='Enter')goDatasetPage(this.value)">
+                        <button class="browse-btn" style="width:auto;padding:8px 12px;" onclick="goDatasetPage(document.getElementById('dsJump').value)">GO</button>
                         <button class="browse-btn" id="dsNext" style="width:auto;padding:8px 16px;" onclick="loadDatasetPage(1)">NEXT ▶</button>
                         </div>
                     </div>
@@ -264,6 +266,8 @@
                                 <button class="browse-btn" id="fkPrev" style="width:auto;padding:8px 16px;" onclick="loadFlickrPage(-1)">◀ PREV</button>
                                 <input type="number" id="fkJump" min="1" placeholder="page…" style="width:80px;padding:6px;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:4px;" onkeydown="if(event.key==='Enter')jumpFlickr()">
                                 <span id="fkPageLabel" style="color:var(--text-mute);font-size:12px;">Page 1</span>
+                                <input id="fkJump2" type="number" min="1" placeholder="#" style="width:55px;padding:6px;margin:0 4px;background:var(--void-2);border:1px solid var(--cyan);color:var(--text);border-radius:4px;" onkeydown="if(event.key==='Enter')goFlickrPage(this.value)">
+                                <button class="browse-btn" style="width:auto;padding:8px 12px;" onclick="goFlickrPage(document.getElementById('fkJump2').value)">GO</button>
                                 <button class="browse-btn" id="fkNext" style="width:auto;padding:8px 16px;" onclick="loadFlickrPage(1)">NEXT ▶</button>
                             </div>
                         </div>
@@ -1047,6 +1051,9 @@
         }
 
         let dsPage = 1, selectedDatasetFile = null, fkPage = 1, selectedFlickrFile = null;
+        let dsTotalPages = 1, fkTotalPages = 1;
+        function goDatasetPage(n){ n = parseInt(n); if(!n||n<1) return; fetchDataset(Math.min(n, dsTotalPages)); }
+        function goFlickrPage(n){ n = parseInt(n); if(!n||n<1) return; fetchFlickr(Math.min(n, fkTotalPages)); }
         function openDatasetModal(){ document.getElementById('datasetModal').classList.add('active'); fetchDataset(dsPage); }
         function closeDatasetModal(){ document.getElementById('datasetModal').classList.remove('active'); }
         function loadDatasetPage(d){ dsPage = Math.max(1, dsPage + d); fetchDataset(dsPage); }
@@ -1097,7 +1104,7 @@
                     const d = document.createElement('div'); d.className = 'dataset-thumb';
                     if(fn === selectedFlickrFile) d.classList.add('selected');
                     d.title = fn; d.onclick = () => selectFlickrImage(fn);
-                    const im = document.createElement('img'); im.src = `/flickr8k/${encodeURI(fn)}`; im.loading = 'lazy';
+                    const im = document.createElement('img'); im.src = `/flickr8k_image/${encodeURI(fn)}`; im.loading = 'lazy';
                     d.appendChild(im); grid.appendChild(d);
                 });
                 document.getElementById('fkPrev').disabled = data.page <= 1;
@@ -1108,7 +1115,7 @@
         function selectFlickrImage(fn){
             selectedFileMulti = null; document.getElementById('queryInputMulti').value = '';
             selectedFlickrFile = fn;
-            document.getElementById('queryPreviewMulti').innerHTML = `<img src="/flickr8k/${encodeURI(fn)}" alt="Query">`;
+            document.getElementById('queryPreviewMulti').innerHTML = `<img src="/flickr8k_image/${encodeURI(fn)}" alt="Query">`;
             setStatus('statusLabelMulti', '✓ Flickr8k: ' + fn, 'success');
             closeFlickrModal();
         }
