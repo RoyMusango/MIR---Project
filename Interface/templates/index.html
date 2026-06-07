@@ -83,12 +83,16 @@
                         <h3 style="color:var(--cyan);font-family:var(--font-display);margin:0 0 6px;">SELECT DATASET IMAGE</h3>
                         <p id="datasetInfo" style="color:var(--text-mute);font-size:11px;margin:0 0 16px;"></p>
                         <div id="datasetGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:10px;"></div>
-                        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:18px;gap:12px;flex-wrap:wrap;">
-                        <button class="browse-btn" id="dsPrev" style="width:auto;padding:8px 16px;" onclick="loadDatasetPage(-1)">◀ PREV</button>
-                        <span id="dsPage" style="color:var(--text-mute);font-size:12px;">Page 1</span>
-                        <input id="dsJump" type="number" min="1" placeholder="#" style="width:55px;padding:6px;margin:0 4px;background:var(--void-2);border:1px solid var(--cyan);color:var(--text);border-radius:4px;" onkeydown="if(event.key==='Enter')goDatasetPage(this.value)">
-                        <button class="browse-btn" style="width:auto;padding:8px 12px;" onclick="goDatasetPage(document.getElementById('dsJump').value)">GO</button>
-                        <button class="browse-btn" id="dsNext" style="width:auto;padding:8px 16px;" onclick="loadDatasetPage(1)">NEXT ▶</button>
+                        <div style="margin-top:18px;display:flex;flex-direction:column;gap:8px;">
+                            <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
+                                <button class="browse-btn" id="dsPrev" style="flex:1;padding:8px;" onclick="loadDatasetPage(-1)">◀ PREV</button>
+                                <span id="dsPage" style="color:var(--text-mute);font-size:11px;white-space:nowrap;">Page 1</span>
+                                <button class="browse-btn" id="dsNext" style="flex:1;padding:8px;" onclick="loadDatasetPage(1)">NEXT ▶</button>
+                            </div>
+                            <div style="display:flex;gap:8px;align-items:center;">
+                                <input id="dsJump" type="number" min="1" placeholder="Jump to page #" style="flex:1;padding:6px 10px;background:var(--void-2);border:1px solid var(--cyan);color:var(--text);border-radius:4px;" onkeydown="if(event.key==='Enter')goDatasetPage(this.value)">
+                                <button class="browse-btn" style="padding:8px 16px;" onclick="goDatasetPage(document.getElementById('dsJump').value)">GO</button>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -262,13 +266,16 @@
                             <h3 style="color:var(--cyan);font-family:var(--font-display);margin:0 0 6px;">SELECT FLICKR8K IMAGE</h3>
                             <p id="flickrInfo" style="color:var(--text-mute);font-size:11px;margin:0 0 16px;"></p>
                             <div id="flickrGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:10px;"></div>
-                            <div style="display:flex;justify-content:space-between;align-items:center;margin-top:18px;gap:10px;">
-                                <button class="browse-btn" id="fkPrev" style="width:auto;padding:8px 16px;" onclick="loadFlickrPage(-1)">◀ PREV</button>
-                                <input type="number" id="fkJump" min="1" placeholder="page…" style="width:80px;padding:6px;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:4px;" onkeydown="if(event.key==='Enter')jumpFlickr()">
-                                <span id="fkPageLabel" style="color:var(--text-mute);font-size:12px;">Page 1</span>
-                                <input id="fkJump2" type="number" min="1" placeholder="#" style="width:55px;padding:6px;margin:0 4px;background:var(--void-2);border:1px solid var(--cyan);color:var(--text);border-radius:4px;" onkeydown="if(event.key==='Enter')goFlickrPage(this.value)">
-                                <button class="browse-btn" style="width:auto;padding:8px 12px;" onclick="goFlickrPage(document.getElementById('fkJump2').value)">GO</button>
-                                <button class="browse-btn" id="fkNext" style="width:auto;padding:8px 16px;" onclick="loadFlickrPage(1)">NEXT ▶</button>
+                            <div style="margin-top:18px;display:flex;flex-direction:column;gap:8px;">
+                                <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
+                                    <button class="browse-btn" id="fkPrev" style="flex:1;padding:8px;" onclick="loadFlickrPage(-1)">◀ PREV</button>
+                                    <span id="fkPageLabel" style="color:var(--text-mute);font-size:11px;white-space:nowrap;">Page 1</span>
+                                    <button class="browse-btn" id="fkNext" style="flex:1;padding:8px;" onclick="loadFlickrPage(1)">NEXT ▶</button>
+                                </div>
+                                <div style="display:flex;gap:8px;align-items:center;">
+                                    <input id="fkJump2" type="number" min="1" placeholder="Jump to page #" style="flex:1;padding:6px 10px;background:var(--void-2);border:1px solid var(--cyan);color:var(--text);border-radius:4px;" onkeydown="if(event.key==='Enter')goFlickrPage(this.value)">
+                                    <button class="browse-btn" style="padding:8px 16px;" onclick="goFlickrPage(document.getElementById('fkJump2').value)">GO</button>
+                                </div>
                             </div>
                         </div>
                     </div>
