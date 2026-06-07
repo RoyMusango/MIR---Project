@@ -423,7 +423,7 @@ def search():
         return jsonify({"error": error}), 400
 
     # add the query image url so we can show it
-    result["query_image_url"] = url_for('serve_upload', filename=filename)
+    result["query_image_url"] = query_url
 
     return jsonify(result)
 
