@@ -83,7 +83,7 @@
                         <h3 style="color:var(--cyan);font-family:var(--font-display);margin:0 0 6px;">SELECT DATASET IMAGE</h3>
                         <p id="datasetInfo" style="color:var(--text-mute);font-size:11px;margin:0 0 16px;"></p>
                         <div id="datasetGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:10px;"></div>
-                        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:18px;">
+                        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:18px;gap:12px;flex-wrap:wrap;">
                         <button class="browse-btn" id="dsPrev" style="width:auto;padding:8px 16px;" onclick="loadDatasetPage(-1)">◀ PREV</button>
                         <span id="dsPage" style="color:var(--text-mute);font-size:12px;">Page 1</span>
                         <input id="dsJump" type="number" min="1" placeholder="#" style="width:55px;padding:6px;margin:0 4px;background:var(--void-2);border:1px solid var(--cyan);color:var(--text);border-radius:4px;" onkeydown="if(event.key==='Enter')goDatasetPage(this.value)">
@@ -941,7 +941,7 @@
                     card.innerHTML = `
                         <span class="rank-badge">#${r.rank}</span>
                         <div class="thumb-wrapper">
-                            <img src="${r.image_url}" alt="${r.filename}" loading="lazy">
+                            <img src="${r.image_url}" alt="${r.filename}" loading="lazy" onerror="this.style.display='none';this.parentNode.innerHTML='<div style=&quot;display:flex;align-items:center;justify-content:center;height:100%;color:var(--text-mute);font-size:11px;text-align:center;padding:8px;&quot;>image not<br>available</div>'">
                         </div>
                         <p class="card-filename" title="${r.filename}">${r.filename.length > 22 ? r.filename.slice(0, 19) + '...' : r.filename}</p>
                         <p class="card-distance">${scoreLabel}</p>
